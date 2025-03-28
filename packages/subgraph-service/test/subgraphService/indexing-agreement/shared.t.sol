@@ -11,6 +11,7 @@ import { SubgraphServiceTest } from "../SubgraphService.t.sol";
 contract SubgraphServiceIndexingAgreementSharedTest is SubgraphServiceTest, Bounder {
     struct SetupTestIndexerParams {
         address indexer;
+        string indexerLabel;
         uint256 unboundedTokens;
         uint256 unboundedAllocationPrivateKey;
         bytes32 subgraphDeploymentId;
@@ -104,6 +105,7 @@ contract SubgraphServiceIndexingAgreementSharedTest is SubgraphServiceTest, Boun
     }
 
     function _setupTestIndexer(SetupTestIndexerParams calldata _params) internal returns (TestIndexerParams memory) {
+        vm.label(_params.indexer, string.concat("indexer-", _params.indexerLabel));
         vm.assume(_isSafeSubgraphServiceCaller(_params.indexer) && !_registeredIndexers[_params.indexer]);
         _registeredIndexers[_params.indexer] = true;
 

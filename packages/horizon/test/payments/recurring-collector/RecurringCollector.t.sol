@@ -8,15 +8,15 @@ import { IPaymentsCollector } from "../../../contracts/interfaces/IPaymentsColle
 import { IRecurringCollector } from "../../../contracts/interfaces/IRecurringCollector.sol";
 import { RecurringCollector } from "../../../contracts/payments/collectors/RecurringCollector.sol";
 
-import { AuthorizableHelper } from "../../utilities/Authorizable.t.sol";
 import { Bounder } from "../../utils/Bounder.t.sol";
 import { RecurringCollectorControllerMock } from "./RecurringCollectorControllerMock.t.sol";
 import { PaymentsEscrowMock } from "./PaymentsEscrowMock.t.sol";
+import { RecurringCollectorHelper } from "./RecurringCollectorHelper.t.sol";
 
 contract RecurringCollectorTest is Test, Bounder {
     RecurringCollector private _recurringCollector;
-    AuthorizableHelper private _authHelper;
     PaymentsEscrowMock private _paymentsEscrow;
+    RecurringCollectorHelper private _recurringCollectorHelper;
 
     function setUp() public {
         _paymentsEscrow = new PaymentsEscrowMock();
@@ -26,7 +26,7 @@ contract RecurringCollectorTest is Test, Bounder {
             address(new RecurringCollectorControllerMock(address(_paymentsEscrow))),
             1
         );
-        _authHelper = new AuthorizableHelper(_recurringCollector, 1);
+        _recurringCollectorHelper = new RecurringCollectorHelper(_recurringCollector);
     }
 
     /*
@@ -404,9 +404,9 @@ contract RecurringCollectorTest is Test, Bounder {
         uint256 _signerKey
     ) private returns (IRecurringCollector.SignedRCV memory) {
         vm.assume(_rcv.payer != address(0));
-        _authHelper.authorizeSignerWithChecks(_rcv.payer, _signerKey);
+        _recurringCollectorHelper.authorizeSignerWithChecks(_rcv.payer, _signerKey);
         _rcv.acceptDeadline = boundTimestampMin(_rcv.acceptDeadline, block.timestamp + 1);
-        IRecurringCollector.SignedRCV memory signedRCV = _generateSignedRCV(_recurringCollector, _rcv, _signerKey);
+        IRecurringCollector.SignedRCV memory signedRCV = _recurringCollectorHelper.generateSignedRCV(_rcv, _signerKey);
 
         vm.prank(_rcv.dataService);
         _recurringCollector.accept(signedRCV);
@@ -476,22 +476,6 @@ contract RecurringCollectorTest is Test, Bounder {
         );
 
         return (data, collectionSeconds, tokens);
-    }
-
-    function _generateSignedRCV(
-        IRecurringCollector _collector,
-        IRecurringCollector.RecurrentCollectionVoucher memory _rcv,
-        uint256 _signerPrivateKey
-    ) private view returns (IRecurringCollector.SignedRCV memory) {
-        bytes32 messageHash = _collector.encodeRCV(_rcv);
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(_signerPrivateKey, messageHash);
-        bytes memory signature = abi.encodePacked(r, s, v);
-        IRecurringCollector.SignedRCV memory signedRCV = IRecurringCollector.SignedRCV({
-            rcv: _rcv,
-            signature: signature
-        });
-
-        return signedRCV;
     }
 
     function _sensibleRCV(
