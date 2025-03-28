@@ -250,6 +250,13 @@ contract SubgraphService is
      *
      * @param indexer The address of the indexer
      * @param paymentType The type of payment to collect as defined in {IGraphPayments}
+     * @param data Encoded data:
+     *    - For query fees:
+     *      - IGraphTallyCollector.SignedRAV `signedRav`: The signed RAV
+     *    - For indexing rewards:
+     *      - address `allocationId`: The id of the allocation
+     *      - bytes32 `poi`: The POI being presented
+     *      - bytes32 `publicPOI`: The public POI associated with the presented POI
      */
     /// @inheritdoc IDataService
     function collect(
@@ -275,12 +282,12 @@ contract SubgraphService is
             );
             paymentCollected = _collectQueryFees(signedRav);
         } else if (paymentType == IGraphPayments.PaymentTypes.IndexingRewards) {
-            (address allocationId, bytes32 poi) = abi.decode(data, (address, bytes32));
+            (address allocationId, bytes32 poi, bytes32 publicPOI) = abi.decode(data, (address, bytes32, bytes32));
             require(
                 _allocations.get(allocationId).indexer == indexer,
                 SubgraphServiceAllocationNotAuthorized(indexer, allocationId)
             );
-            paymentCollected = _collectIndexingRewards(allocationId, poi, _delegationRatio);
+            paymentCollected = _collectIndexingRewards(allocationId, poi, publicPOI, _delegationRatio);
         } else {
             revert SubgraphServiceInvalidPaymentType(paymentType);
         }

@@ -36,7 +36,7 @@ contract SubgraphServiceAllocationForceCloseTest is SubgraphServiceTest {
             // Skip forward
             skip(timeBetweenPOIs);
 
-            bytes memory data = abi.encode(allocationID, bytes32("POI1"));
+            bytes memory data = abi.encode(allocationID, bytes32("POI1"), bytes32("PUBLIC_POI1"));
             _collect(users.indexer, IGraphPayments.PaymentTypes.IndexingRewards, data);
         }
 
@@ -61,7 +61,7 @@ contract SubgraphServiceAllocationForceCloseTest is SubgraphServiceTest {
 
             resetPrank(users.indexer);
 
-            bytes memory data = abi.encode(allocationID, bytes32("POI1"));
+            bytes memory data = abi.encode(allocationID, bytes32("POI1"), bytes32("PUBLIC_POI1"));
             _collect(users.indexer, IGraphPayments.PaymentTypes.IndexingRewards, data);
 
             resetPrank(permissionlessBob);

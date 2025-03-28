@@ -39,7 +39,7 @@ contract SubgraphServiceAllocationResizeTest is SubgraphServiceTest {
         vm.roll(block.number + EPOCH_LENGTH);
 
         IGraphPayments.PaymentTypes paymentType = IGraphPayments.PaymentTypes.IndexingRewards;
-        bytes memory data = abi.encode(allocationID, bytes32("POI1"));
+        bytes memory data = abi.encode(allocationID, bytes32("POI1"), bytes32("PUBLIC_POI1"));
         _collect(users.indexer, paymentType, data);
         _addToProvision(users.indexer, resizeTokens);
         _resizeAllocation(users.indexer, allocationID, resizeTokens);

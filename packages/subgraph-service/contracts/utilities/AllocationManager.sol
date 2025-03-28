@@ -61,6 +61,7 @@ abstract contract AllocationManager is EIP712Upgradeable, GraphDirectory, Alloca
      * @param tokensIndexerRewards The amount of tokens collected for the indexer
      * @param tokensDelegationRewards The amount of tokens collected for delegators
      * @param poi The POI presented
+     * @param publicPOI The public POI associated with the presented POI
      * @param currentEpoch The current epoch
      */
     event IndexingRewardsCollected(
@@ -71,6 +72,7 @@ abstract contract AllocationManager is EIP712Upgradeable, GraphDirectory, Alloca
         uint256 tokensIndexerRewards,
         uint256 tokensDelegationRewards,
         bytes32 poi,
+        bytes32 publicPOI,
         uint256 currentEpoch
     );
 
@@ -263,12 +265,14 @@ abstract contract AllocationManager is EIP712Upgradeable, GraphDirectory, Alloca
      *
      * @param _allocationId The id of the allocation to collect rewards for
      * @param _poi The POI being presented
+     * @param _publicPOI The public POI associated with the presented POI
      * @param _delegationRatio The delegation ratio to consider when locking tokens
      * @return The amount of tokens collected
      */
     function _collectIndexingRewards(
         address _allocationId,
         bytes32 _poi,
+        bytes32 _publicPOI,
         uint32 _delegationRatio
     ) internal returns (uint256) {
         Allocation.State memory allocation = _allocations.get(_allocationId);
@@ -334,6 +338,7 @@ abstract contract AllocationManager is EIP712Upgradeable, GraphDirectory, Alloca
             tokensIndexerRewards,
             tokensDelegationRewards,
             _poi,
+            _publicPOI,
             currentEpoch
         );
 

@@ -180,6 +180,7 @@ contract SubgraphServiceTest is SubgraphServiceSharedTest {
 
     struct IndexingRewardsData {
         bytes32 poi;
+        bytes32 publicPOI;
         uint256 tokensIndexerRewards;
         uint256 tokensDelegationRewards;
     }
@@ -323,7 +324,7 @@ contract SubgraphServiceTest is SubgraphServiceSharedTest {
     function _handleIndexingRewardsCollection(
         bytes memory _data
     ) private returns (uint256 paymentCollected, address allocationId, IndexingRewardsData memory indexingRewardsData) {
-        (allocationId, indexingRewardsData.poi) = abi.decode(_data, (address, bytes32));
+        (allocationId, indexingRewardsData.poi, indexingRewardsData.publicPOI) = abi.decode(_data, (address, bytes32, bytes32));
         Allocation.State memory allocation = subgraphService.getAllocation(allocationId);
 
         // Calculate accumulated tokens, this depends on the rewards manager which we have mocked
@@ -357,6 +358,7 @@ contract SubgraphServiceTest is SubgraphServiceSharedTest {
             indexingRewardsData.tokensIndexerRewards,
             indexingRewardsData.tokensDelegationRewards,
             indexingRewardsData.poi,
+            indexingRewardsData.publicPOI,
             epochManager.currentEpoch()
         );
 
