@@ -14,18 +14,18 @@ contract RecurringCollectorHelper is AuthorizableHelper {
         collector = collector_;
     }
 
-    function generateSignedRCV(
-        IRecurringCollector.RecurrentCollectionVoucher memory rcv,
+    function generateSignedRCA(
+        IRecurringCollector.RecurringCollectionAgreement memory rca,
         uint256 signerPrivateKey
-    ) public view returns (IRecurringCollector.SignedRCV memory) {
-        bytes32 messageHash = collector.encodeRCV(rcv);
+    ) public view returns (IRecurringCollector.SignedRCA memory) {
+        bytes32 messageHash = collector.encodeRCA(rca);
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(signerPrivateKey, messageHash);
         bytes memory signature = abi.encodePacked(r, s, v);
-        IRecurringCollector.SignedRCV memory signedRCV = IRecurringCollector.SignedRCV({
-            rcv: rcv,
+        IRecurringCollector.SignedRCA memory signedRCA = IRecurringCollector.SignedRCA({
+            rca: rca,
             signature: signature
         });
 
-        return signedRCV;
+        return signedRCA;
     }
 }

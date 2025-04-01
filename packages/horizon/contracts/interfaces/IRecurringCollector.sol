@@ -13,32 +13,32 @@ import { IAuthorizable } from "./IAuthorizable.sol";
  * recurrent payments.
  */
 interface IRecurringCollector is IAuthorizable, IPaymentsCollector {
-    /// @notice A representation of a signed Recurrent Collection Voucher (RCV)
-    struct SignedRCV {
-        // The RCV
-        RecurrentCollectionVoucher rcv;
+    /// @notice A representation of a signed Recurring Collection Agreement (RCA)
+    struct SignedRCA {
+        // The RCA
+        RecurringCollectionAgreement rca;
         // Signature - 65 bytes: r (32 Bytes) || s (32 Bytes) || v (1 Byte)
         bytes signature;
     }
 
-    /// @notice The Recurrent Collection Voucher (RCV)
-    struct RecurrentCollectionVoucher {
-        // The agreement ID of the RCV
+    /// @notice The Recurring Collection Agreement (RCA)
+    struct RecurringCollectionAgreement {
+        // The agreement ID of the RCA
         bytes16 agreementId;
-        // The deadline for accepting the RCV
+        // The deadline for accepting the RCA
         uint256 acceptDeadline;
-        // The duration of the RCV in seconds
+        // The duration of the RCA in seconds
         uint256 duration;
-        // The address of the payer the RCV was issued by
+        // The address of the payer the RCA was issued by
         address payer;
-        // The address of the data service the RCV was issued to
+        // The address of the data service the RCA was issued to
         address dataService;
-        // The address of the service provider the RCV was issued to
+        // The address of the service provider the RCA was issued to
         address serviceProvider;
         // The maximum amount of tokens that can be collected in the first collection
         // on top of the amount allowed for subsequent collections
         uint256 maxInitialTokens;
-        // The maximum amount of tokens that can be collected in a single collection
+        // The maximum amount of tokens that can be collected per second
         // except for the first collection
         uint256 maxOngoingTokensPerSecond;
         // The minimum amount of seconds that must pass between collections
@@ -51,6 +51,12 @@ interface IRecurringCollector is IAuthorizable, IPaymentsCollector {
 
     /// @notice The data for an agreement
     struct AgreementData {
+        // The address of the data service
+        address dataService;
+        // The address of the payer
+        address payer;
+        // The address of the service provider
+        address serviceProvider;
         // The timestamp when the agreement was accepted
         uint256 acceptedAt;
         // The timestamp when the agreement was last collected at
@@ -60,31 +66,20 @@ interface IRecurringCollector is IAuthorizable, IPaymentsCollector {
         // The maximum amount of tokens that can be collected in the first collection
         // on top of the amount allowed for subsequent collections
         uint256 maxInitialTokens;
-        // The maximum amount of tokens that can be collected in a single collection
+        // The maximum amount of tokens that can be collected per second
         // except for the first collection
         uint256 maxOngoingTokensPerSecond;
         // The minimum amount of seconds that must pass between collections
         uint32 minSecondsPerCollection;
         // The maximum amount of seconds that can pass between collections
         uint32 maxSecondsPerCollection;
-    }
-
-    /// @notice The key for a stored agreement
-    struct AgreementKey {
-        // The address of the data service the agreement was issued to
-        address dataService;
-        // The address of the payer the agreement was issued by
-        address payer;
-        // The address of the service provider the agreement was issued to
-        address serviceProvider;
-        // The ID of the agreement
-        bytes16 agreementId;
+        // The agreement ID of the previous agreement
+        bytes16 updatedFromAgreementId;
     }
 
     /// @notice The params for collecting an agreement
     struct CollectParams {
-        // The agreement key that uniquely identifies it
-        AgreementKey key;
+        bytes16 agreementId;
         // The collection ID
         bytes32 collectionId;
         // The amount of tokens to collect
@@ -94,12 +89,12 @@ interface IRecurringCollector is IAuthorizable, IPaymentsCollector {
     }
 
     /**
-     * @notice Emitted when an RCV is collected
+     * @notice Emitted when an RCA is collected
      * @param dataService The address of the data service
      * @param payer The address of the payer
      * @param serviceProvider The address of the service provider
      */
-    event RCVCollected(
+    event RCACollected(
         address indexed dataService,
         address indexed payer,
         address indexed serviceProvider,
@@ -109,15 +104,22 @@ interface IRecurringCollector is IAuthorizable, IPaymentsCollector {
     );
 
     /**
+     * Thrown when calling cancel() for an agreement not owned by the calling data service
+     * @param agreementId The agreement ID
+     * @param dataService The address of the data service
+     */
+    error RecurringCollectorDataServiceNotAuthorized(bytes16 agreementId, address dataService);
+
+    /**
      * Thrown when calling accept() for an agreement with an elapsed acceptance deadline
      * @param elapsedAt The timestamp when the acceptance deadline elapsed
      */
     error RecurringCollectorAgreementAcceptanceElapsed(uint256 elapsedAt);
 
     /**
-     * Thrown when the RCV signer is invalid
+     * Thrown when the RCA signer is invalid
      */
-    error RecurringCollectorInvalidRCVSigner();
+    error RecurringCollectorInvalidRCASigner();
 
     /**
      * Thrown when the payment type is not IndexingFee
@@ -126,7 +128,7 @@ interface IRecurringCollector is IAuthorizable, IPaymentsCollector {
     error RecurringCollectorInvalidPaymentType(IGraphPayments.PaymentTypes paymentType);
 
     /**
-     * Thrown when the caller is not the data service the RCV was issued to
+     * Thrown when the caller is not the data service the RCA was issued to
      * @param caller The address of the caller
      * @param dataService The address of the data service
      */
@@ -140,79 +142,82 @@ interface IRecurringCollector is IAuthorizable, IPaymentsCollector {
 
     /**
      * Thrown when calling accept() for an already accepted agreement
-     * @param key The agreement key
+     * @param agreementId The agreement ID
      */
-    error RecurringCollectorAgreementAlreadyAccepted(AgreementKey key);
+    error RecurringCollectorAgreementAlreadyAccepted(bytes16 agreementId);
 
     /**
      * Thrown when calling cancel() for a never accepted agreement
-     * @param key The agreement key
+     * @param agreementId The agreement ID
      */
-    error RecurringCollectorAgreementNeverAccepted(AgreementKey key);
+    error RecurringCollectorAgreementNeverAccepted(bytes16 agreementId);
 
     /**
      * Thrown when calling collect() on an invalid agreement
-     * @param key The agreement key
+     * @param agreementId The agreement ID
      * @param acceptedAt The agreement accepted timestamp
      */
-    error RecurringCollectorAgreementInvalid(AgreementKey key, uint256 acceptedAt);
+    error RecurringCollectorAgreementInvalid(bytes16 agreementId, uint256 acceptedAt);
 
     /**
      * Thrown when calling collect() on an elapsed agreement
-     * @param key The agreement key
+     * @param agreementId The agreement ID
      * @param agreementEnd The agreement end timestamp
      */
-    error RecurringCollectorAgreementElapsed(AgreementKey key, uint256 agreementEnd);
+    error RecurringCollectorAgreementElapsed(bytes16 agreementId, uint256 agreementEnd);
 
     /**
      * Thrown when calling collect() too soon
-     * @param key The agreement key
+     * @param agreementId The agreement ID
      * @param secondsSinceLast Seconds since last collection
      * @param minSeconds Minimum seconds between collections
      */
-    error RecurringCollectorCollectionTooSoon(AgreementKey key, uint256 secondsSinceLast, uint256 minSeconds);
+    error RecurringCollectorCollectionTooSoon(bytes16 agreementId, uint256 secondsSinceLast, uint256 minSeconds);
 
     /**
      * Thrown when calling collect() too late
-     * @param key The agreement key
+     * @param agreementId The agreement ID
      * @param secondsSinceLast Seconds since last collection
      * @param maxSeconds Maximum seconds between collections
      */
-    error RecurringCollectorCollectionTooLate(AgreementKey key, uint256 secondsSinceLast, uint256 maxSeconds);
+    error RecurringCollectorCollectionTooLate(bytes16 agreementId, uint256 secondsSinceLast, uint256 maxSeconds);
 
     /**
      * Thrown when calling collect() too late
-     * @param key The agreement key
+     * @param agreementId The agreement ID
      * @param tokens The amount of tokens to collect
      * @param maxTokens The maximum amount of tokens allowed to collect
      */
-    error RecurringCollectorCollectAmountTooHigh(AgreementKey key, uint256 tokens, uint256 maxTokens);
+    error RecurringCollectorCollectAmountTooHigh(bytes16 agreementId, uint256 tokens, uint256 maxTokens);
 
     /**
      * @dev Accept an indexing agreement.
-     * @param signedRCV The signed Recurrent Collection Voucher which is to be accepted.
+     * @param signedRCA The signed Recurring Collection Agreement which is to be accepted.
      */
-    function accept(SignedRCV memory signedRCV) external;
+    function accept(SignedRCA memory signedRCA) external;
 
     /**
      * @dev Cancel an indexing agreement.
-     * @param payer The address of the payer for the agreement.
-     * @param serviceProvider The address of the serviceProvider for the agreement.
      * @param agreementId The agreement's ID.
      */
-    function cancel(address payer, address serviceProvider, bytes16 agreementId) external;
+    function cancel(bytes16 agreementId) external;
 
     /**
-     * @dev Computes the hash of a RecurrentCollectionVoucher (RCV).
-     * @param rcv The RCV for which to compute the hash.
-     * @return The hash of the RCV.
+     * @dev Upgrade an indexing agreement.
      */
-    function encodeRCV(RecurrentCollectionVoucher calldata rcv) external view returns (bytes32);
+    function upgrade() external;
 
     /**
-     * @dev Recovers the signer address of a signed RecurrentCollectionVoucher (RCV).
-     * @param signedRCV The SignedRCV containing the RCV and its signature.
+     * @dev Computes the hash of a RecurringCollectionAgreement (RCA).
+     * @param rca The RCA for which to compute the hash.
+     * @return The hash of the RCA.
+     */
+    function encodeRCA(RecurringCollectionAgreement calldata rca) external view returns (bytes32);
+
+    /**
+     * @dev Recovers the signer address of a signed RecurringCollectionAgreement (RCA).
+     * @param signedRCA The SignedRCA containing the RCA and its signature.
      * @return The address of the signer.
      */
-    function recoverRCVSigner(SignedRCV calldata signedRCV) external view returns (address);
+    function recoverRCASigner(SignedRCA calldata signedRCA) external view returns (address);
 }

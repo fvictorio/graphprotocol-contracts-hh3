@@ -13,32 +13,24 @@ import { PPMMath } from "../../libraries/PPMMath.sol";
 /**
  * @title RecurringCollector contract
  * @dev Implements the {IRecurringCollector} interface.
- * @notice A payments collector contract that can be used to collect payments using a RCV (Recurrent Collection Voucher).
+ * @notice A payments collector contract that can be used to collect payments using a RCA (Recurring Collection Agreement).
  * @custom:security-contact Please email security+contracts@thegraph.com if you find any
  * bugs. We may have an active bug bounty program.
  */
 contract RecurringCollector is EIP712, GraphDirectory, Authorizable, IRecurringCollector {
     using PPMMath for uint256;
 
-    /// @notice The EIP712 typehash for the RecurrentCollectionVoucher struct
-    bytes32 private constant EIP712_RCV_TYPEHASH =
-        keccak256("RecurrentCollectionVoucher(address dataService,address serviceProvider,bytes metadata)");
+    /// @notice The EIP712 typehash for the RecurringCollectionAgreement struct
+    bytes32 public constant EIP712_RCA_TYPEHASH =
+        keccak256(
+            "RecurringCollectionAgreement(bytes16 agreementId,uint256 acceptDeadline,uint256 duration,address payer,address dataService,address serviceProvider,uint256 maxInitialTokens,uint256 maxOngoingTokensPerSecond,uint32 minSecondsPerCollection,uint32 maxSecondsPerCollection,bytes metadata)"
+        );
 
     /// @notice Sentinel value to indicate an agreement has been canceled
-    uint256 private constant CANCELED = type(uint256).max;
+    uint256 public constant CANCELED = type(uint256).max;
 
     /// @notice Tracks agreements
-    mapping(address dataService => mapping(address payer => mapping(address serviceProvider => mapping(bytes16 agreementId => AgreementData data))))
-        public agreements;
-
-    /**
-     * @notice Checks that msg sender is the data service
-     * @param dataService The address of the dataService
-     */
-    modifier onlyDataService(address dataService) {
-        require(dataService == msg.sender, RecurringCollectorCallerNotDataService(msg.sender, dataService));
-        _;
-    }
+    mapping(bytes16 agreementId => AgreementData data) public agreements;
 
     /**
      * @notice Constructs a new instance of the RecurringCollector contract.
@@ -57,15 +49,15 @@ contract RecurringCollector is EIP712, GraphDirectory, Authorizable, IRecurringC
     /**
      * @notice Initiate a payment collection through the payments protocol.
      * See {IGraphPayments.collect}.
-     * @dev Caller must be the data service the RCV was issued to.
+     * @dev Caller must be the data service the RCA was issued to.
      */
     function collect(IGraphPayments.PaymentTypes paymentType, bytes calldata data) external returns (uint256) {
         require(
             paymentType == IGraphPayments.PaymentTypes.IndexingFee,
             RecurringCollectorInvalidPaymentType(paymentType)
         );
-        try this.decodeCollectData(data) returns (CollectParams memory params) {
-            return _collect(params);
+        try this.decodeCollectData(data) returns (CollectParams memory collectParams) {
+            return _collect(collectParams);
         } catch {
             revert RecurringCollectorInvalidCollectData(data);
         }
@@ -74,35 +66,36 @@ contract RecurringCollector is EIP712, GraphDirectory, Authorizable, IRecurringC
     /**
      * @notice Accept an indexing agreement.
      * See {IRecurringCollector.accept}.
-     * @dev Caller must be the data service the RCV was issued to.
+     * @dev Caller must be the data service the RCA was issued to.
      */
-    function accept(SignedRCV memory signedRCV) external onlyDataService(signedRCV.rcv.dataService) {
+    function accept(SignedRCA memory signedRCA) external {
         require(
-            signedRCV.rcv.acceptDeadline >= block.timestamp,
-            RecurringCollectorAgreementAcceptanceElapsed(signedRCV.rcv.acceptDeadline)
+            msg.sender == signedRCA.rca.dataService,
+            RecurringCollectorCallerNotDataService(msg.sender, signedRCA.rca.dataService)
+        );
+        require(
+            signedRCA.rca.acceptDeadline >= block.timestamp,
+            RecurringCollectorAgreementAcceptanceElapsed(signedRCA.rca.acceptDeadline)
         );
 
         // check that the voucher is signed by the payer (or proxy)
-        _requireAuthorizedRCVSigner(signedRCV);
+        _requireAuthorizedRCASigner(signedRCA);
 
-        AgreementKey memory key = AgreementKey({
-            dataService: signedRCV.rcv.dataService,
-            payer: signedRCV.rcv.payer,
-            serviceProvider: signedRCV.rcv.serviceProvider,
-            agreementId: signedRCV.rcv.agreementId
-        });
-        AgreementData storage agreement = _getForUpdateAgreement(key);
+        AgreementData storage agreement = _getForUpdateAgreement(signedRCA.rca.agreementId);
         // check that the agreement is not already accepted
-        require(agreement.acceptedAt == 0, RecurringCollectorAgreementAlreadyAccepted(key));
+        require(agreement.acceptedAt == 0, RecurringCollectorAgreementAlreadyAccepted(signedRCA.rca.agreementId));
 
         // accept the agreement
         agreement.acceptedAt = block.timestamp;
+        agreement.dataService = signedRCA.rca.dataService;
+        agreement.payer = signedRCA.rca.payer;
+        agreement.serviceProvider = signedRCA.rca.serviceProvider;
         // FIX-ME: These need to be validated to something that makes sense for the contract
-        agreement.duration = signedRCV.rcv.duration;
-        agreement.maxInitialTokens = signedRCV.rcv.maxInitialTokens;
-        agreement.maxOngoingTokensPerSecond = signedRCV.rcv.maxOngoingTokensPerSecond;
-        agreement.minSecondsPerCollection = signedRCV.rcv.minSecondsPerCollection;
-        agreement.maxSecondsPerCollection = signedRCV.rcv.maxSecondsPerCollection;
+        agreement.duration = signedRCA.rca.duration;
+        agreement.maxInitialTokens = signedRCA.rca.maxInitialTokens;
+        agreement.maxOngoingTokensPerSecond = signedRCA.rca.maxOngoingTokensPerSecond;
+        agreement.minSecondsPerCollection = signedRCA.rca.minSecondsPerCollection;
+        agreement.maxSecondsPerCollection = signedRCA.rca.maxSecondsPerCollection;
     }
 
     /**
@@ -110,30 +103,37 @@ contract RecurringCollector is EIP712, GraphDirectory, Authorizable, IRecurringC
      * See {IRecurringCollector.cancel}.
      * @dev Caller must be the data service for the agreement.
      */
-    function cancel(address payer, address serviceProvider, bytes16 agreementId) external {
-        AgreementKey memory key = AgreementKey({
-            dataService: msg.sender,
-            payer: payer,
-            serviceProvider: serviceProvider,
-            agreementId: agreementId
-        });
-        AgreementData storage agreement = _getForUpdateAgreement(key);
-        require(agreement.acceptedAt > 0, RecurringCollectorAgreementNeverAccepted(key));
+    function cancel(bytes16 agreementId) external {
+        AgreementData storage agreement = _getForUpdateAgreement(agreementId);
+        require(agreement.acceptedAt > 0, RecurringCollectorAgreementNeverAccepted(agreementId));
+        require(
+            agreement.dataService == msg.sender,
+            RecurringCollectorDataServiceNotAuthorized(agreementId, msg.sender)
+        );
         agreement.acceptedAt = CANCELED;
     }
 
     /**
-     * @notice See {IRecurringCollector.recoverRCVSigner}
+     * @notice Upgrade an indexing agreement.
+     * See {IRecurringCollector.upgrade}.
+     * @dev Caller must be the data service the RCA was issued to.
      */
-    function recoverRCVSigner(SignedRCV calldata signedRCV) external view returns (address) {
-        return _recoverRCVSigner(signedRCV);
+    function upgrade() external {
+        // FIX-ME: implement me
     }
 
     /**
-     * @notice See {IRecurringCollector.encodeRCV}
+     * @notice See {IRecurringCollector.recoverRCASigner}
      */
-    function encodeRCV(RecurrentCollectionVoucher calldata rcv) external view returns (bytes32) {
-        return _encodeRCV(rcv);
+    function recoverRCASigner(SignedRCA calldata signedRCA) external view returns (address) {
+        return _recoverRCASigner(signedRCA);
+    }
+
+    /**
+     * @notice See {IRecurringCollector.encodeRCA}
+     */
+    function encodeRCA(RecurringCollectionAgreement calldata rca) external view returns (bytes32) {
+        return _encodeRCA(rca);
     }
 
     /**
@@ -145,38 +145,49 @@ contract RecurringCollector is EIP712, GraphDirectory, Authorizable, IRecurringC
 
     /**
      * @notice Collect payment through the payments protocol.
-     * @dev Caller must be the data service the RCV was issued to.
+     * @dev Caller must be the data service the RCA was issued to.
      *
-     * Emits {PaymentCollected} and {RCVCollected} events.
+     * Emits {PaymentCollected} and {RCACollected} events.
      *
      * @param _params The decoded parameters for the collection
      * @return The amount of tokens collected
      */
-    function _collect(CollectParams memory _params) private onlyDataService(_params.key.dataService) returns (uint256) {
-        _requireValidCollect(_params.key, _params.tokens);
+    function _collect(CollectParams memory _params) private returns (uint256) {
+        AgreementData storage agreement = _getForUpdateAgreement(_params.agreementId);
+        require(
+            agreement.acceptedAt > 0,
+            RecurringCollectorAgreementInvalid(_params.agreementId, agreement.acceptedAt)
+        );
+        require(
+            msg.sender == agreement.dataService,
+            RecurringCollectorDataServiceNotAuthorized(_params.agreementId, msg.sender)
+        );
+
+        _requireValidCollect(agreement, _params.agreementId, _params.tokens);
+        agreement.lastCollectionAt = block.timestamp;
 
         _graphPaymentsEscrow().collect(
             IGraphPayments.PaymentTypes.IndexingFee,
-            _params.key.payer,
-            _params.key.serviceProvider,
+            agreement.payer,
+            agreement.serviceProvider,
             _params.tokens,
-            _params.key.dataService,
+            agreement.dataService,
             _params.dataServiceCut
         );
 
         emit PaymentCollected(
             IGraphPayments.PaymentTypes.IndexingFee,
             _params.collectionId,
-            _params.key.payer,
-            _params.key.serviceProvider,
-            _params.key.dataService,
+            agreement.payer,
+            agreement.serviceProvider,
+            agreement.dataService,
             _params.tokens
         );
 
-        emit RCVCollected(
-            _params.key.dataService,
-            _params.key.payer,
-            _params.key.serviceProvider,
+        emit RCACollected(
+            agreement.dataService,
+            agreement.payer,
+            agreement.serviceProvider,
             _params.collectionId,
             _params.tokens,
             _params.dataServiceCut
@@ -188,65 +199,74 @@ contract RecurringCollector is EIP712, GraphDirectory, Authorizable, IRecurringC
     /**
      * @notice Requires that the agreement is valid for collection.
      */
-    function _requireValidCollect(AgreementKey memory _key, uint256 _tokens) private {
-        AgreementData storage agreement = _getForUpdateAgreement(_key);
-        uint256 lastCollectionAt = agreement.lastCollectionAt;
-        agreement.lastCollectionAt = block.timestamp;
-
+    function _requireValidCollect(AgreementData memory _agreement, bytes16 _agreementId, uint256 _tokens) private view {
         require(
-            agreement.acceptedAt > 0 && agreement.acceptedAt != CANCELED,
-            RecurringCollectorAgreementInvalid(_key, agreement.acceptedAt)
+            _agreement.acceptedAt > 0 && _agreement.acceptedAt != CANCELED,
+            RecurringCollectorAgreementInvalid(_agreementId, _agreement.acceptedAt)
         );
 
-        uint256 agreementEnd = agreement.duration < type(uint256).max - agreement.acceptedAt
-            ? agreement.acceptedAt + agreement.duration
+        uint256 agreementEnd = _agreement.duration < type(uint256).max - _agreement.acceptedAt
+            ? _agreement.acceptedAt + _agreement.duration
             : type(uint256).max;
-        require(agreementEnd >= block.timestamp, RecurringCollectorAgreementElapsed(_key, agreementEnd));
+        require(agreementEnd >= block.timestamp, RecurringCollectorAgreementElapsed(_agreementId, agreementEnd));
 
         uint256 collectionSeconds = block.timestamp;
-        collectionSeconds -= lastCollectionAt > 0 ? lastCollectionAt : agreement.acceptedAt;
+        collectionSeconds -= _agreement.lastCollectionAt > 0 ? _agreement.lastCollectionAt : _agreement.acceptedAt;
         require(
-            collectionSeconds >= agreement.minSecondsPerCollection,
-            RecurringCollectorCollectionTooSoon(_key, collectionSeconds, agreement.minSecondsPerCollection)
+            collectionSeconds >= _agreement.minSecondsPerCollection,
+            RecurringCollectorCollectionTooSoon(_agreementId, collectionSeconds, _agreement.minSecondsPerCollection)
         );
         require(
-            collectionSeconds <= agreement.maxSecondsPerCollection,
-            RecurringCollectorCollectionTooLate(_key, collectionSeconds, agreement.maxSecondsPerCollection)
+            collectionSeconds <= _agreement.maxSecondsPerCollection,
+            RecurringCollectorCollectionTooLate(_agreementId, collectionSeconds, _agreement.maxSecondsPerCollection)
         );
 
-        uint256 maxTokens = agreement.maxOngoingTokensPerSecond * collectionSeconds;
-        maxTokens += lastCollectionAt == 0 ? agreement.maxInitialTokens : 0;
+        uint256 maxTokens = _agreement.maxOngoingTokensPerSecond * collectionSeconds;
+        maxTokens += _agreement.lastCollectionAt == 0 ? _agreement.maxInitialTokens : 0;
 
-        require(_tokens <= maxTokens, RecurringCollectorCollectAmountTooHigh(_key, _tokens, maxTokens));
+        require(_tokens <= maxTokens, RecurringCollectorCollectAmountTooHigh(_agreementId, _tokens, maxTokens));
     }
 
     /**
-     * @notice See {IRecurringCollector.recoverRCVSigner}
+     * @notice See {IRecurringCollector.recoverRCASigner}
      */
-    function _recoverRCVSigner(SignedRCV memory _signedRCV) private view returns (address) {
-        bytes32 messageHash = _encodeRCV(_signedRCV.rcv);
-        return ECDSA.recover(messageHash, _signedRCV.signature);
+    function _recoverRCASigner(SignedRCA memory _signedRCA) private view returns (address) {
+        bytes32 messageHash = _encodeRCA(_signedRCA.rca);
+        return ECDSA.recover(messageHash, _signedRCA.signature);
     }
 
     /**
-     * @notice See {IRecurringCollector.encodeRCV}
+     * @notice See {IRecurringCollector.encodeRCA}
      */
-    function _encodeRCV(RecurrentCollectionVoucher memory _rcv) private view returns (bytes32) {
+    function _encodeRCA(RecurringCollectionAgreement memory _rca) private view returns (bytes32) {
         return
             _hashTypedDataV4(
                 keccak256(
-                    abi.encode(EIP712_RCV_TYPEHASH, _rcv.dataService, _rcv.serviceProvider, keccak256(_rcv.metadata))
+                    abi.encode(
+                        EIP712_RCA_TYPEHASH,
+                        _rca.agreementId,
+                        _rca.acceptDeadline,
+                        _rca.duration,
+                        _rca.payer,
+                        _rca.dataService,
+                        _rca.serviceProvider,
+                        _rca.maxInitialTokens,
+                        _rca.maxOngoingTokensPerSecond,
+                        _rca.minSecondsPerCollection,
+                        _rca.maxSecondsPerCollection,
+                        keccak256(_rca.metadata)
+                    )
                 )
             );
     }
 
     /**
-     * @notice Requires that the signer for the RCV is authorized
-     * by the payer of the RCV.
+     * @notice Requires that the signer for the RCA is authorized
+     * by the payer of the RCA.
      */
-    function _requireAuthorizedRCVSigner(SignedRCV memory _signedRCV) private view returns (address) {
-        address signer = _recoverRCVSigner(_signedRCV);
-        require(_isAuthorized(_signedRCV.rcv.payer, signer), RecurringCollectorInvalidRCVSigner());
+    function _requireAuthorizedRCASigner(SignedRCA memory _signedRCA) private view returns (address) {
+        address signer = _recoverRCASigner(_signedRCA);
+        require(_isAuthorized(_signedRCA.rca.payer, signer), RecurringCollectorInvalidRCASigner());
 
         return signer;
     }
@@ -254,7 +274,14 @@ contract RecurringCollector is EIP712, GraphDirectory, Authorizable, IRecurringC
     /**
      * @notice Gets an agreement to be updated.
      */
-    function _getForUpdateAgreement(AgreementKey memory _key) private view returns (AgreementData storage) {
-        return agreements[_key.dataService][_key.payer][_key.serviceProvider][_key.agreementId];
+    function _getForUpdateAgreement(bytes16 _agreementId) private view returns (AgreementData storage) {
+        return agreements[_agreementId];
+    }
+
+    /**
+     * @notice Gets an agreement.
+     */
+    function _getAgreement(bytes16 _agreementId) private view returns (AgreementData memory) {
+        return agreements[_agreementId];
     }
 }

@@ -20,27 +20,18 @@ contract SubgraphServiceIndexingAgreementCollectTest is SubgraphServiceIndexingA
     /* solhint-disable graph/func-name-mixedcase */
     function test_SubgraphService_CollectIndexingFees(
         SetupTestIndexerParams calldata fuzzyParams,
-        ISubgraphService.IndexingAgreementKey memory key,
         uint256 entities,
         bytes32 poi,
-        IRecurringCollector.SignedRCV calldata fuzzySignedRCV,
+        IRecurringCollector.SignedRCA calldata fuzzySignedRCA,
         uint256 unboundedTokensCollected
     ) public {
         TestIndexerParams memory params = _setupTestIndexer(fuzzyParams);
-        IRecurringCollector.SignedRCV memory signedRCV = _acceptAgreement(params, fuzzySignedRCV);
-        key.indexer = params.indexer;
-        key.payer = signedRCV.rcv.payer;
-        key.agreementId = signedRCV.rcv.agreementId;
+        IRecurringCollector.SignedRCA memory signedRCA = _acceptAgreement(params, fuzzySignedRCA);
 
         resetPrank(params.indexer);
         bytes memory data = abi.encode(
             IRecurringCollector.CollectParams({
-                key: IRecurringCollector.AgreementKey({
-                    dataService: address(subgraphService),
-                    payer: key.payer,
-                    serviceProvider: key.indexer,
-                    agreementId: key.agreementId
-                }),
+                agreementId: signedRCA.rca.agreementId,
                 collectionId: bytes32(uint256(uint160(params.allocationId))),
                 tokens: 0,
                 dataServiceCut: 0
@@ -57,10 +48,10 @@ contract SubgraphServiceIndexingAgreementCollectTest is SubgraphServiceIndexingA
             abi.encodeCall(IPaymentsCollector.collect, (IGraphPayments.PaymentTypes.IndexingFee, data))
         );
         vm.expectEmit(address(subgraphService));
-        emit ISubgraphService.IndexingFeesCollected(
-            key.indexer,
-            key.payer,
-            key.agreementId,
+        emit ISubgraphService.IndexingFeesCollectedV1(
+            params.indexer,
+            signedRCA.rca.payer,
+            signedRCA.rca.agreementId,
             params.allocationId,
             params.subgraphDeploymentId,
             epochManager.currentEpoch(),
@@ -71,7 +62,7 @@ contract SubgraphServiceIndexingAgreementCollectTest is SubgraphServiceIndexingA
         subgraphService.collect(
             params.indexer,
             IGraphPayments.PaymentTypes.IndexingFee,
-            abi.encode(key, entities, poi)
+            _encodeCollectDataV1(signedRCA.rca.agreementId, entities, poi)
         );
     }
 
@@ -80,45 +71,56 @@ contract SubgraphServiceIndexingAgreementCollectTest is SubgraphServiceIndexingA
     }
 
     function test_SubgraphService_CollectIndexingFees_Revert_WhenPaused(
-        ISubgraphService.IndexingAgreementKey calldata key,
+        address indexer,
+        bytes16 agreementId,
         uint256 entities,
         bytes32 poi
-    ) public withSafeIndexerOrOperator(key.indexer) {
+    ) public withSafeIndexerOrOperator(indexer) {
         resetPrank(users.pauseGuardian);
         subgraphService.pause();
 
         vm.expectRevert(PausableUpgradeable.EnforcedPause.selector);
-        resetPrank(key.indexer);
-        subgraphService.collect(key.indexer, IGraphPayments.PaymentTypes.IndexingFee, abi.encode(key, entities, poi));
+        resetPrank(indexer);
+        subgraphService.collect(
+            indexer,
+            IGraphPayments.PaymentTypes.IndexingFee,
+            _encodeCollectDataV1(agreementId, entities, poi)
+        );
     }
 
     function test_SubgraphService_CollectIndexingFees_Revert_WhenNotAuthorized(
         address operator,
-        ISubgraphService.IndexingAgreementKey calldata key,
+        address indexer,
+        bytes16 agreementId,
         uint256 entities,
         bytes32 poi
     ) public withSafeIndexerOrOperator(operator) {
-        vm.assume(operator != key.indexer);
+        vm.assume(operator != indexer);
         resetPrank(operator);
         bytes memory expectedErr = abi.encodeWithSelector(
             ProvisionManager.ProvisionManagerNotAuthorized.selector,
-            key.indexer,
+            indexer,
             operator
         );
         vm.expectRevert(expectedErr);
-        subgraphService.collect(key.indexer, IGraphPayments.PaymentTypes.IndexingFee, abi.encode(key, entities, poi));
+        subgraphService.collect(
+            indexer,
+            IGraphPayments.PaymentTypes.IndexingFee,
+            _encodeCollectDataV1(agreementId, entities, poi)
+        );
     }
 
     function test_SubgraphService_CollectIndexingFees_Revert_WhenInvalidProvision(
         uint256 unboundedTokens,
-        ISubgraphService.IndexingAgreementKey calldata key,
+        address indexer,
+        bytes16 agreementId,
         uint256 entities,
         bytes32 poi
-    ) public withSafeIndexerOrOperator(key.indexer) {
+    ) public withSafeIndexerOrOperator(indexer) {
         uint256 tokens = bound(unboundedTokens, 1, minimumProvisionTokens - 1);
-        mint(key.indexer, tokens);
-        resetPrank(key.indexer);
-        _createProvision(key.indexer, tokens, maxSlashingPercentage, disputePeriod);
+        mint(indexer, tokens);
+        resetPrank(indexer);
+        _createProvision(indexer, tokens, maxSlashingPercentage, disputePeriod);
 
         bytes memory expectedErr = abi.encodeWithSelector(
             ProvisionManager.ProvisionManagerInvalidValue.selector,
@@ -128,62 +130,65 @@ contract SubgraphServiceIndexingAgreementCollectTest is SubgraphServiceIndexingA
             maximumProvisionTokens
         );
         vm.expectRevert(expectedErr);
-        subgraphService.collect(key.indexer, IGraphPayments.PaymentTypes.IndexingFee, abi.encode(key, entities, poi));
+        subgraphService.collect(
+            indexer,
+            IGraphPayments.PaymentTypes.IndexingFee,
+            _encodeCollectDataV1(agreementId, entities, poi)
+        );
     }
 
     function test_SubgraphService_CollectIndexingFees_Revert_WhenIndexerNotRegistered(
         uint256 unboundedTokens,
-        ISubgraphService.IndexingAgreementKey calldata key,
+        address indexer,
+        bytes16 agreementId,
         uint256 entities,
         bytes32 poi
-    ) public withSafeIndexerOrOperator(key.indexer) {
+    ) public withSafeIndexerOrOperator(indexer) {
         uint256 tokens = bound(unboundedTokens, minimumProvisionTokens, MAX_TOKENS);
-        mint(key.indexer, tokens);
-        resetPrank(key.indexer);
-        _createProvision(key.indexer, tokens, maxSlashingPercentage, disputePeriod);
+        mint(indexer, tokens);
+        resetPrank(indexer);
+        _createProvision(indexer, tokens, maxSlashingPercentage, disputePeriod);
         bytes memory expectedErr = abi.encodeWithSelector(
             ISubgraphService.SubgraphServiceIndexerNotRegistered.selector,
-            key.indexer
+            indexer
         );
         vm.expectRevert(expectedErr);
-        subgraphService.collect(key.indexer, IGraphPayments.PaymentTypes.IndexingFee, abi.encode(key, entities, poi));
+        subgraphService.collect(
+            indexer,
+            IGraphPayments.PaymentTypes.IndexingFee,
+            _encodeCollectDataV1(agreementId, entities, poi)
+        );
     }
 
     function test_SubgraphService_CollectIndexingFees_Revert_WhenInvalidAgreement(
         SetupTestIndexerParams calldata fuzzyParams,
-        ISubgraphService.IndexingAgreementKey memory key,
+        bytes16 agreementId,
         uint256 entities,
         bytes32 poi
     ) public {
         TestIndexerParams memory params = _setupTestIndexer(fuzzyParams);
-        key.indexer = params.indexer;
 
         bytes memory expectedErr = abi.encodeWithSelector(
             ISubgraphService.SubgraphServiceIndexingAgreementNotActive.selector,
-            key
+            agreementId
         );
         vm.expectRevert(expectedErr);
         resetPrank(params.indexer);
         subgraphService.collect(
             params.indexer,
             IGraphPayments.PaymentTypes.IndexingFee,
-            abi.encode(key, entities, poi)
+            _encodeCollectDataV1(agreementId, entities, poi)
         );
     }
 
     function test_SubgraphService_CollectIndexingFees_Reverts_WhenAllocationClosed(
         SetupTestIndexerParams calldata fuzzyParams,
-        ISubgraphService.IndexingAgreementKey memory key,
         uint256 entities,
         bytes32 poi,
-        IRecurringCollector.SignedRCV calldata fuzzySignedRCV
+        IRecurringCollector.SignedRCA calldata fuzzySignedRCA
     ) public {
         TestIndexerParams memory params = _setupTestIndexer(fuzzyParams);
-        _acceptAgreement(params, fuzzySignedRCV);
-
-        key.indexer = params.indexer;
-        key.payer = fuzzySignedRCV.rcv.payer;
-        key.agreementId = fuzzySignedRCV.rcv.agreementId;
+        _acceptAgreement(params, fuzzySignedRCA);
 
         resetPrank(params.indexer);
         subgraphService.stopService(params.indexer, abi.encode(params.allocationId));
@@ -196,7 +201,7 @@ contract SubgraphServiceIndexingAgreementCollectTest is SubgraphServiceIndexingA
         subgraphService.collect(
             params.indexer,
             IGraphPayments.PaymentTypes.IndexingFee,
-            abi.encode(key, entities, poi)
+            _encodeCollectDataV1(fuzzySignedRCA.rca.agreementId, entities, poi)
         );
     }
     /* solhint-enable graph/func-name-mixedcase */

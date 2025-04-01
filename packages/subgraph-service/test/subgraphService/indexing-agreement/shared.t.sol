@@ -56,52 +56,52 @@ contract SubgraphServiceIndexingAgreementSharedTest is SubgraphServiceTest, Boun
 
     function _acceptAgreement(
         TestIndexerParams memory _params,
-        IRecurringCollector.SignedRCV memory _signedRCV
-    ) internal returns (IRecurringCollector.SignedRCV memory) {
-        ISubgraphService.RCVMetadata memory metadata = _createAgreementMetadata(_params.subgraphDeploymentId);
-        _signedRCV.rcv.serviceProvider = _params.indexer;
-        _signedRCV.rcv.dataService = address(subgraphService);
-        _signedRCV.rcv.metadata = abi.encode(metadata);
+        IRecurringCollector.SignedRCA memory _signedRCA
+    ) internal returns (IRecurringCollector.SignedRCA memory) {
+        ISubgraphService.RCAIndexingAgreementMetadata memory metadata = _createRCAMetadataV1(
+            _params.subgraphDeploymentId
+        );
+        _signedRCA.rca.serviceProvider = _params.indexer;
+        _signedRCA.rca.dataService = address(subgraphService);
+        _signedRCA.rca.metadata = abi.encode(metadata);
 
-        _mockCollectorAccept(address(recurringCollector), _signedRCV);
+        _mockCollectorAccept(address(recurringCollector), _signedRCA);
 
         vm.expectEmit(address(subgraphService));
         emit ISubgraphService.IndexingAgreementAccepted(
-            _signedRCV.rcv.serviceProvider,
-            _signedRCV.rcv.payer,
-            _signedRCV.rcv.agreementId,
+            _signedRCA.rca.serviceProvider,
+            _signedRCA.rca.payer,
+            _signedRCA.rca.agreementId,
             _params.allocationId,
             metadata.subgraphDeploymentId,
-            metadata.tokensPerSecond,
-            metadata.tokensPerEntityPerSecond
+            metadata.version,
+            metadata.terms
         );
 
         resetPrank(_params.indexer);
-        subgraphService.acceptIndexingAgreement(_params.allocationId, _signedRCV);
-        return _signedRCV;
+        subgraphService.acceptIndexingAgreement(_params.allocationId, _signedRCA);
+        return _signedRCA;
     }
 
     function _cancelAgreementBy(address _indexer, address _payer, bytes16 _agreementId, bool _byIndexer) internal {
         vm.expectEmit(address(subgraphService));
         emit ISubgraphService.IndexingAgreementCanceled(_indexer, _payer, _agreementId, _byIndexer ? _indexer : _payer);
-        _byIndexer
-            ? _cancelAgreementByIndexer(_indexer, _payer, _agreementId)
-            : _cancelAgreementByPayer(_indexer, _payer, _agreementId);
+        _byIndexer ? _cancelAgreementByIndexer(_indexer, _agreementId) : _cancelAgreementByPayer(_payer, _agreementId);
     }
 
-    function _cancelAgreementByPayer(address _indexer, address _payer, bytes16 _agreementId) internal {
+    function _cancelAgreementByPayer(address _payer, bytes16 _agreementId) internal {
         _mockCollectorIsAuthorized(address(recurringCollector), _payer, _payer, true);
 
-        _mockCollectorCancel(address(recurringCollector), _payer, _indexer, _agreementId);
+        _mockCollectorCancel(address(recurringCollector), _agreementId);
         vm.assume(_isSafeSubgraphServiceCaller(_payer));
         resetPrank(_payer);
-        subgraphService.cancelIndexingAgreementByPayer(_indexer, _payer, _agreementId);
+        subgraphService.cancelIndexingAgreementByPayer(_payer, _agreementId);
     }
 
-    function _cancelAgreementByIndexer(address _indexer, address _payer, bytes16 _agreementId) internal {
-        _mockCollectorCancel(address(recurringCollector), _payer, _indexer, _agreementId);
+    function _cancelAgreementByIndexer(address _indexer, bytes16 _agreementId) internal {
+        _mockCollectorCancel(address(recurringCollector), _agreementId);
         resetPrank(_indexer);
-        subgraphService.cancelIndexingAgreement(_indexer, _payer, _agreementId);
+        subgraphService.cancelIndexingAgreement(_indexer, _agreementId);
     }
 
     function _setupTestIndexer(SetupTestIndexerParams calldata _params) internal returns (TestIndexerParams memory) {
@@ -151,33 +151,25 @@ contract SubgraphServiceIndexingAgreementSharedTest is SubgraphServiceTest, Boun
         vm.expectCall(address(_recurringCollector), abi.encodeCall(IAuthorizable.isAuthorized, (_payer, _indexer)));
     }
 
-    function _mockCollectorCancel(
-        address _recurringCollector,
-        address _payer,
-        address _indexer,
-        bytes16 _agreementId
-    ) internal {
+    function _mockCollectorCancel(address _recurringCollector, bytes16 _agreementId) internal {
         vm.mockCall(
             _recurringCollector,
-            abi.encodeWithSelector(IRecurringCollector.cancel.selector, _payer, _indexer, _agreementId),
+            abi.encodeWithSelector(IRecurringCollector.cancel.selector, _agreementId),
             new bytes(0)
         );
-        vm.expectCall(
-            _recurringCollector,
-            abi.encodeCall(IRecurringCollector.cancel, (_payer, _indexer, _agreementId))
-        );
+        vm.expectCall(_recurringCollector, abi.encodeCall(IRecurringCollector.cancel, (_agreementId)));
     }
 
     function _mockCollectorAccept(
         address _recurringCollector,
-        IRecurringCollector.SignedRCV memory _signedRCV
+        IRecurringCollector.SignedRCA memory _signedRCA
     ) internal {
         vm.mockCall(
             _recurringCollector,
-            abi.encodeWithSelector(IRecurringCollector.accept.selector, _signedRCV),
+            abi.encodeWithSelector(IRecurringCollector.accept.selector, _signedRCA),
             new bytes(0)
         );
-        vm.expectCall(address(recurringCollector), abi.encodeCall(IRecurringCollector.accept, (_signedRCV)));
+        vm.expectCall(address(recurringCollector), abi.encodeCall(IRecurringCollector.accept, (_signedRCA)));
     }
 
     function _isSafeSubgraphServiceCaller(address _candidate) internal view returns (bool) {
@@ -187,14 +179,38 @@ contract SubgraphServiceIndexingAgreementSharedTest is SubgraphServiceTest, Boun
             _candidate != address(proxyAdmin);
     }
 
-    function _createAgreementMetadata(
+    function _createRCAMetadataV1(
         bytes32 _subgraphDeploymentId
-    ) internal pure returns (ISubgraphService.RCVMetadata memory) {
+    ) internal pure returns (ISubgraphService.RCAIndexingAgreementMetadata memory) {
         return
-            ISubgraphService.RCVMetadata({
-                tokensPerSecond: 0,
-                tokensPerEntityPerSecond: 0,
-                subgraphDeploymentId: _subgraphDeploymentId
+            ISubgraphService.RCAIndexingAgreementMetadata({
+                subgraphDeploymentId: _subgraphDeploymentId,
+                version: ISubgraphService.IndexingAgreementVersion.V1,
+                terms: abi.encode(
+                    ISubgraphService.IndexingAgreementTermsV1({ tokensPerSecond: 0, tokensPerEntityPerSecond: 0 })
+                )
             });
+    }
+
+    function _encodeCollectDataV1(
+        bytes16 _agreementId,
+        uint256 _entities,
+        bytes32 _poi
+    ) internal pure returns (bytes memory) {
+        return abi.encode(_agreementId, abi.encode(_entities, _poi));
+    }
+
+    function _encodeRCAMetadataV1(
+        bytes32 _subgraphDeploymentId,
+        ISubgraphService.IndexingAgreementTermsV1 memory _params
+    ) internal pure returns (bytes memory) {
+        return
+            abi.encode(
+                ISubgraphService.RCAIndexingAgreementMetadata({
+                    subgraphDeploymentId: _subgraphDeploymentId,
+                    version: ISubgraphService.IndexingAgreementVersion.V1,
+                    terms: abi.encode(_params)
+                })
+            );
     }
 }

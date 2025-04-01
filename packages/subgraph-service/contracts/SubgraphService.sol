@@ -17,6 +17,7 @@ import { DataServiceFees } from "@graphprotocol/horizon/contracts/data-service/e
 import { Directory } from "./utilities/Directory.sol";
 import { AllocationManager } from "./utilities/AllocationManager.sol";
 import { SubgraphServiceV1Storage } from "./SubgraphServiceStorage.sol";
+import { Decoder } from "./Decoder.sol";
 
 import { TokenUtils } from "@graphprotocol/contracts/contracts/utils/TokenUtils.sol";
 import { PPMMath } from "@graphprotocol/horizon/contracts/libraries/PPMMath.sol";
@@ -40,6 +41,7 @@ contract SubgraphService is
     Directory,
     AllocationManager,
     SubgraphServiceV1Storage,
+    Decoder,
     IRewardsIssuer,
     ISubgraphService
 {
@@ -288,11 +290,9 @@ contract SubgraphService is
             );
             paymentCollected = _collectIndexingRewards(allocationId, poi, _delegationRatio);
         } else if (paymentType == IGraphPayments.PaymentTypes.IndexingFee) {
-            (IndexingAgreementKey memory key, uint256 entities, bytes32 poi) = abi.decode(
-                data,
-                (IndexingAgreementKey, uint256, bytes32)
-            );
-            paymentCollected = _collectIndexingFees(key, entities, poi);
+            (bytes16 agreementId, bytes memory iaCollectionData) = _decodeCollectIndexingFeeData(data);
+
+            paymentCollected = _collectIndexingFees(agreementId, iaCollectionData);
         } else {
             revert SubgraphServiceInvalidPaymentType(paymentType);
         }
@@ -552,11 +552,13 @@ contract SubgraphService is
     uint256 private constant CANCELED = type(uint256).max;
 
     /// @notice Tracks indexing agreements
-    mapping(address indexer => mapping(address payer => mapping(bytes16 agreementId => IndexingAgreementData data)))
-        public indexingAgreements;
+    mapping(bytes16 agreementId => IndexingAgreementData data) public indexingAgreements;
 
-    /// @notice Lookup agreement key by allocation ID
-    mapping(address allocationId => IndexingAgreementKey key) public allocationToActiveAgreementKey;
+    /// @notice Tracks indexing agreements parameters (V1)
+    mapping(bytes16 agreementId => IndexingAgreementTermsV1 data) public indexingAgreementTermsV1;
+
+    /// @notice Lookup agreement ID by allocation ID
+    mapping(address allocationId => bytes16 agreementId) public allocationToActiveAgreementId;
 
     /**
      * @notice Accept an indexing agreement.
@@ -572,45 +574,87 @@ contract SubgraphService is
      * - Agreement must not have been accepted before
      * - Allocation must not have an agreement already
      *
-     * @dev signedRCV.rcv.metadata is an encoding of {ISubgraphService.RCVMetadata}
+     * @dev signedRCA.rca.metadata is an encoding of {ISubgraphService.RCAIndexingAgreementMetadata}
      *
      * Emits {IndexingAgreementAccepted} event
      *
      * @param allocationId The id of the allocation
-     * @param signedRCV The signed Recurrent Collection Voucher
+     * @param signedRCA The signed Recurring Collection Agreement
      */
     function acceptIndexingAgreement(
         address allocationId,
-        IRecurringCollector.SignedRCV calldata signedRCV
+        IRecurringCollector.SignedRCA calldata signedRCA
     )
         external
         whenNotPaused
-        onlyAuthorizedForProvision(signedRCV.rcv.serviceProvider)
-        onlyValidProvision(signedRCV.rcv.serviceProvider)
-        onlyRegisteredIndexer(signedRCV.rcv.serviceProvider)
+        onlyAuthorizedForProvision(signedRCA.rca.serviceProvider)
+        onlyValidProvision(signedRCA.rca.serviceProvider)
+        onlyRegisteredIndexer(signedRCA.rca.serviceProvider)
     {
         require(
-            signedRCV.rcv.dataService == address(this),
-            SubgraphServiceIndexingAgreementDataServiceMismatch(signedRCV.rcv.dataService)
+            signedRCA.rca.dataService == address(this),
+            SubgraphServiceIndexingAgreementDataServiceMismatch(signedRCA.rca.dataService)
         );
 
-        RCVMetadata memory metadata;
-        try this.decodeRCVMetadata(signedRCV.rcv.metadata) returns (RCVMetadata memory decoded) {
-            metadata = decoded;
-            _acceptIndexingAgreement(allocationId, signedRCV, decoded);
-        } catch {
-            revert SubgraphServiceInvalidRCVMetadata(signedRCV.rcv.metadata);
-        }
+        RCAIndexingAgreementMetadata memory metadata = _decodeRCAMetadata(signedRCA.rca.metadata);
+        _acceptIndexingAgreement(allocationId, signedRCA, metadata);
 
         emit IndexingAgreementAccepted(
-            signedRCV.rcv.serviceProvider,
-            signedRCV.rcv.payer,
-            signedRCV.rcv.agreementId,
+            signedRCA.rca.serviceProvider,
+            signedRCA.rca.payer,
+            signedRCA.rca.agreementId,
             allocationId,
             metadata.subgraphDeploymentId,
-            metadata.tokensPerSecond,
-            metadata.tokensPerEntityPerSecond
+            metadata.version,
+            metadata.terms
         );
+    }
+
+    function upgradeIndexingAgreement(
+        IRecurringCollector.SignedRCA calldata signedRCA
+    )
+        external
+        view
+        whenNotPaused
+        onlyAuthorizedForProvision(signedRCA.rca.serviceProvider)
+        onlyValidProvision(signedRCA.rca.serviceProvider)
+        onlyRegisteredIndexer(signedRCA.rca.serviceProvider)
+    {
+        require(
+            signedRCA.rca.dataService == address(this),
+            SubgraphServiceIndexingAgreementDataServiceMismatch(signedRCA.rca.dataService)
+        );
+
+        // FIX-ME: Implement me
+        // _cancelIndexingAgreement(signedRCA.rca.payer, signedRCA.rca.serviceProvider, oldAgreementId);
+        // IndexingAgreementKey memory oldKey = IndexingAgreementKey({
+        //     indexer: signedRCA.rca.serviceProvider,
+        //     payer: signedRCA.rca.payer,
+        //     agreementId: oldAgreementId
+        // });
+        // IndexingAgreementData memory oldAgreement = _getIndexingAgreement(oldKey);
+
+        // RCAIndexingAgreementMetadata memory metadata = _decodeRCAMetadata(signedRCA.rca.metadata);
+        // Allocation.State memory allocation = _allocations.get(oldAgreement.allocationId);
+        // require(
+        //     allocation.subgraphDeploymentId == metadata.subgraphDeploymentId,
+        //     SubgraphServiceIndexingAgreementDeploymentIdMismatch(
+        //         metadata.subgraphDeploymentId,
+        //         oldAgreement.allocationId,
+        //         allocation.subgraphDeploymentId
+        //     )
+        // );
+
+        // _acceptIndexingAgreement(oldAgreement.allocationId, signedRCA, metadata);
+        // IndexingAgreementKey memory key = IndexingAgreementKey({
+        //     indexer: signedRCA.rca.serviceProvider,
+        //     payer: signedRCA.rca.payer,
+        //     agreementId: signedRCA.rca.agreementId
+        // });
+        // IndexingAgreementData storage agreement = _getForUpdateIndexingAgreement(key);
+
+        // agreement.acceptedAt = oldAgreement.acceptedAt;
+        // agreement.lastCollectionAt = oldAgreement.lastCollectionAt;
     }
 
     /**
@@ -627,13 +671,10 @@ contract SubgraphService is
      *
      * Emits {IndexingAgreementCanceled} event
      *
-     * @param indexer The address of the indexer
-     * @param payer The address of the payer
      * @param agreementId The id of the agreement
      */
     function cancelIndexingAgreement(
         address indexer,
-        address payer,
         bytes16 agreementId
     )
         external
@@ -642,9 +683,15 @@ contract SubgraphService is
         onlyValidProvision(indexer)
         onlyRegisteredIndexer(indexer)
     {
-        _cancelIndexingAgreement(payer, indexer, agreementId);
+        IndexingAgreementData storage agreement = _getForUpdateIndexingAgreement(agreementId);
+        require(_isActiveAgreement(agreement), SubgraphServiceIndexingAgreementNotActive(agreementId));
+        require(
+            agreement.indexer == indexer,
+            SubgraphServiceIndexingAgreementNonCancelableBy(agreement.indexer, indexer)
+        );
+        _cancelIndexingAgreement(agreementId, agreement);
 
-        emit IndexingAgreementCanceled(indexer, payer, agreementId, indexer);
+        emit IndexingAgreementCanceled(indexer, agreement.payer, agreementId, indexer);
     }
 
     /**
@@ -657,32 +704,23 @@ contract SubgraphService is
      *
      * Emits {IndexingAgreementCanceled} event
      *
-     * @param indexer The address of the indexer
      * @param payer The address of the payer
      * @param agreementId The id of the agreement
      */
-    function cancelIndexingAgreementByPayer(
-        address indexer,
-        address payer,
-        bytes16 agreementId
-    ) external whenNotPaused {
+    function cancelIndexingAgreementByPayer(address payer, bytes16 agreementId) external whenNotPaused {
+        IndexingAgreementData storage agreement = _getForUpdateIndexingAgreement(agreementId);
+        require(_isActiveAgreement(agreement), SubgraphServiceIndexingAgreementNotActive(agreementId));
         require(
             _recurringCollector().isAuthorized(payer, msg.sender),
             SubgraphServiceIndexingAgreementNonCancelableBy(payer, msg.sender)
         );
-        _cancelIndexingAgreement(payer, indexer, agreementId);
+        _cancelIndexingAgreement(agreementId, agreement);
 
-        emit IndexingAgreementCanceled(indexer, payer, agreementId, payer);
+        emit IndexingAgreementCanceled(agreement.indexer, payer, agreementId, payer);
     }
 
-    /**
-     * @notice Decodes the indexing agreement metadata.
-     *
-     * @param metadata The metadata to decode. See {ISubgraphService.RCVMetadata}
-     * @return The decoded metadata
-     */
-    function decodeRCVMetadata(bytes calldata metadata) public pure returns (RCVMetadata memory) {
-        return abi.decode(metadata, (RCVMetadata));
+    function getIndexingAgreement(bytes16 agreementId) external view returns (IndexingAgreementData memory) {
+        return indexingAgreements[agreementId];
     }
 
     /**
@@ -703,107 +741,114 @@ contract SubgraphService is
      *
      * Emits a {StakeClaimsReleased} event, and a {StakeClaimReleased} event for each claim released.
      * Emits a {StakeClaimLocked} event.
-     * Emits a {IndexingFeesCollected} event.
+     * Emits a {IndexingFeesCollectedV1} event.
      *
-     * @param _key The indexing agreement key
-     * @param _entities The number of entities indexed
-     * @param _poi The proof of indexing
+     * @param _agreementId The id of the indexing agreement
+     * @param _data The indexing agreement collection data
      * @return The amount of fees collected
      */
-    function _collectIndexingFees(
-        IndexingAgreementKey memory _key,
-        uint256 _entities,
-        bytes32 _poi
-    ) private returns (uint256) {
-        IndexingAgreementData memory agreement = _requireActiveIndexingAgreement(_key);
-        Allocation.State memory allocation = _requireValidAllocation(agreement.allocationId, _key.indexer);
+    function _collectIndexingFees(bytes16 _agreementId, bytes memory _data) private returns (uint256) {
+        IndexingAgreementData storage agreement = _getForUpdateIndexingAgreement(_agreementId);
+        require(_isActiveAgreement(agreement), SubgraphServiceIndexingAgreementNotActive(_agreementId));
+        Allocation.State memory allocation = _requireValidAllocation(agreement.allocationId, agreement.indexer);
+
+        require(
+            agreement.version == IndexingAgreementVersion.V1,
+            SubgraphServiceInvalidIndexingAgreementVersion(agreement.version)
+        );
+        (uint256 entities, bytes32 poi) = _decodeCollectIndexingFeeDataV1(_data);
 
         uint256 tokensCollected = _indexingAgreementCollect(
-            _key,
+            _agreementId,
             bytes32(uint256(uint160(agreement.allocationId))),
-            _indexingAgreementTokensToCollect(_key, _entities)
+            _indexingAgreementTokensToCollect(_agreementId, agreement, entities)
         );
 
-        _releaseAndLockStake(_key.indexer, tokensCollected);
+        _releaseAndLockStake(agreement.indexer, tokensCollected);
 
-        emit IndexingFeesCollected(
-            _key.indexer,
-            _key.payer,
-            _key.agreementId,
+        emit IndexingFeesCollectedV1(
+            agreement.indexer,
+            agreement.payer,
+            _agreementId,
             agreement.allocationId,
             allocation.subgraphDeploymentId,
             _graphEpochManager().currentEpoch(),
             tokensCollected,
-            _entities,
-            _poi
+            entities,
+            poi
         );
         return tokensCollected;
     }
 
     function _acceptIndexingAgreement(
         address _allocationId,
-        IRecurringCollector.SignedRCV calldata _signedRCV,
-        RCVMetadata memory _metadata
+        IRecurringCollector.SignedRCA calldata _signedRCA,
+        RCAIndexingAgreementMetadata memory _agreementMetadata
     ) private {
-        Allocation.State memory allocation = _requireValidAllocation(_allocationId, _signedRCV.rcv.serviceProvider);
+        Allocation.State memory allocation = _requireValidAllocation(_allocationId, _signedRCA.rca.serviceProvider);
         require(
-            allocation.subgraphDeploymentId == _metadata.subgraphDeploymentId,
+            allocation.subgraphDeploymentId == _agreementMetadata.subgraphDeploymentId,
             SubgraphServiceIndexingAgreementDeploymentIdMismatch(
-                _metadata.subgraphDeploymentId,
+                _agreementMetadata.subgraphDeploymentId,
                 _allocationId,
                 allocation.subgraphDeploymentId
             )
         );
 
-        IndexingAgreementKey memory key = IndexingAgreementKey({
-            indexer: _signedRCV.rcv.serviceProvider,
-            payer: _signedRCV.rcv.payer,
-            agreementId: _signedRCV.rcv.agreementId
-        });
-        IndexingAgreementData storage agreement = _getForUpdateIndexingAgreement(key);
-        require(agreement.acceptedAt == 0, SubgraphServiceIndexingAgreementAlreadyAccepted(key));
+        IndexingAgreementData storage agreement = _getForUpdateIndexingAgreement(_signedRCA.rca.agreementId);
+        require(agreement.acceptedAt == 0, SubgraphServiceIndexingAgreementAlreadyAccepted(_signedRCA.rca.agreementId));
 
         require(
-            _isZeroIndexingAgreementKey(allocationToActiveAgreementKey[_allocationId]),
-            SubgraphServiceIndexingAgreementAlreadyAllocated(_allocationId)
+            allocationToActiveAgreementId[_allocationId] == bytes16(0),
+            SubgraphServiceAllocationAlreadyHasIndexingAgreement(_allocationId)
         );
-        allocationToActiveAgreementKey[_allocationId] = key;
+        allocationToActiveAgreementId[_allocationId] = _signedRCA.rca.agreementId;
 
+        agreement.indexer = _signedRCA.rca.serviceProvider;
+        agreement.payer = _signedRCA.rca.payer;
+        agreement.version = _agreementMetadata.version;
         agreement.allocationId = _allocationId;
-        agreement.tokensPerSecond = _metadata.tokensPerSecond;
-        agreement.tokensPerEntityPerSecond = _metadata.tokensPerEntityPerSecond;
         agreement.acceptedAt = block.timestamp;
 
-        _recurringCollector().accept(_signedRCV);
+        require(
+            _agreementMetadata.version == IndexingAgreementVersion.V1,
+            SubgraphServiceInvalidIndexingAgreementVersion(_agreementMetadata.version)
+        );
+        _acceptIndexingAgreementTermsV1(_signedRCA.rca.agreementId, _agreementMetadata.terms);
+
+        _recurringCollector().accept(_signedRCA);
+    }
+
+    function _acceptIndexingAgreementTermsV1(bytes16 _agreementId, bytes memory _data) private {
+        IndexingAgreementTermsV1 memory agreementTermsV1 = _decodeAcceptIndexingAgreementTermsV1(_data);
+        IndexingAgreementTermsV1 storage termsV1 = _getForUpdateIndexingAgreementTermsV1(_agreementId);
+        termsV1.tokensPerSecond = agreementTermsV1.tokensPerSecond;
+        termsV1.tokensPerEntityPerSecond = agreementTermsV1.tokensPerEntityPerSecond;
     }
 
     function _indexingAgreementTokensToCollect(
-        IndexingAgreementKey memory _key,
+        bytes16 _agreementId,
+        IndexingAgreementData storage _agreement,
         uint256 _entities
     ) private returns (uint256) {
-        IndexingAgreementData storage agreement = _getForUpdateIndexingAgreement(_key);
+        IndexingAgreementTermsV1 memory termsV1 = _getIndexingAgreementTermsV1(_agreementId);
 
         uint256 collectionSeconds = block.timestamp;
-        collectionSeconds -= agreement.lastCollectionAt > 0 ? agreement.lastCollectionAt : agreement.acceptedAt;
-        agreement.lastCollectionAt = block.timestamp;
+        collectionSeconds -= _agreement.lastCollectionAt > 0 ? _agreement.lastCollectionAt : _agreement.acceptedAt;
+        _agreement.lastCollectionAt = block.timestamp;
 
-        // FIX-ME: this is bad because it encourages people to collect at max seconds allowed to maximize collection.
-        return collectionSeconds * (agreement.tokensPerSecond + agreement.tokensPerEntityPerSecond * _entities);
+        // FIX-ME: this is bad because it encourages indexers to collect at max seconds allowed to maximize collection.
+        return collectionSeconds * (termsV1.tokensPerSecond + termsV1.tokensPerEntityPerSecond * _entities);
     }
 
     function _indexingAgreementCollect(
-        IndexingAgreementKey memory _key,
+        bytes16 _agreementId,
         bytes32 _collectionId,
         uint256 _tokensToCollect
     ) private returns (uint256) {
         bytes memory data = abi.encode(
             IRecurringCollector.CollectParams({
-                key: IRecurringCollector.AgreementKey({
-                    dataService: address(this),
-                    payer: _key.payer,
-                    serviceProvider: _key.indexer,
-                    agreementId: _key.agreementId
-                }),
+                agreementId: _agreementId,
                 collectionId: _collectionId,
                 tokens: _tokensToCollect,
                 dataServiceCut: 0
@@ -824,25 +869,29 @@ contract SubgraphService is
         }
     }
 
-    function _cancelIndexingAgreement(address _payer, address _indexer, bytes16 _agreementId) private {
-        IndexingAgreementKey memory key = IndexingAgreementKey({
-            indexer: _indexer,
-            payer: _payer,
-            agreementId: _agreementId
-        });
-        IndexingAgreementData storage agreement = _getForUpdateIndexingAgreement(key);
-        require(_isActiveAgreement(agreement), SubgraphServiceIndexingAgreementNotActive(key));
+    function _cancelIndexingAgreement(bytes16 _agreementId, IndexingAgreementData storage _agreement) private {
+        _agreement.acceptedAt = CANCELED;
+        delete allocationToActiveAgreementId[_agreement.allocationId];
 
-        agreement.acceptedAt = CANCELED;
-        delete allocationToActiveAgreementKey[agreement.allocationId];
-
-        _recurringCollector().cancel(_payer, _indexer, _agreementId);
+        _recurringCollector().cancel(_agreementId);
     }
 
-    function _getForUpdateIndexingAgreement(
-        IndexingAgreementKey memory _key
-    ) private view returns (IndexingAgreementData storage) {
-        return indexingAgreements[_key.indexer][_key.payer][_key.agreementId];
+    function _getForUpdateIndexingAgreement(bytes16 _agreementId) private view returns (IndexingAgreementData storage) {
+        return indexingAgreements[_agreementId];
+    }
+
+    function _getIndexingAgreement(bytes16 _agreementId) private view returns (IndexingAgreementData memory) {
+        return indexingAgreements[_agreementId];
+    }
+
+    function _getForUpdateIndexingAgreementTermsV1(
+        bytes16 _agreementId
+    ) private view returns (IndexingAgreementTermsV1 storage) {
+        return indexingAgreementTermsV1[_agreementId];
+    }
+
+    function _getIndexingAgreementTermsV1(bytes16 _agreementId) private view returns (IndexingAgreementTermsV1 memory) {
+        return indexingAgreementTermsV1[_agreementId];
     }
 
     function _requireValidAllocation(
@@ -856,23 +905,10 @@ contract SubgraphService is
         return allocation;
     }
 
-    function _requireActiveIndexingAgreement(
-        IndexingAgreementKey memory _key
-    ) private view returns (IndexingAgreementData memory) {
-        IndexingAgreementData memory data = indexingAgreements[_key.indexer][_key.payer][_key.agreementId];
-        require(_isActiveAgreement(data), SubgraphServiceIndexingAgreementNotActive(_key));
-
-        return data;
-    }
-
     function _requireValidCollectionId(bytes32 _collectionId) private pure returns (address) {
         // Check that collectionId (256 bits) is a valid address (160 bits)
         require(uint256(_collectionId) <= type(uint160).max, SubgraphServiceInvalidCollectionId(_collectionId));
         return address(uint160(uint256(_collectionId)));
-    }
-
-    function _isZeroIndexingAgreementKey(IndexingAgreementKey memory _key) private pure returns (bool) {
-        return _key.indexer == address(0) && _key.payer == address(0) && _key.agreementId == bytes16(0);
     }
 
     function _isActiveAgreement(IndexingAgreementData memory _agreement) private pure returns (bool) {

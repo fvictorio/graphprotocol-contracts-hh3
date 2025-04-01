@@ -296,57 +296,63 @@ interface ISubgraphService is IDataServiceFees {
      */
     function getCuration() external view returns (address);
 
-    /**
-     * @notice Indexer Agreement Key
-     * @param indexer The indexer address
-     * @param payer The payer address
-     * @param agreementId The agreement ID
-     */
-    struct IndexingAgreementKey {
-        address indexer;
-        address payer;
-        bytes16 agreementId;
+    /// @notice Versions of Indexing Agreement Metadata
+    enum IndexingAgreementVersion {
+        V1
     }
 
     /**
      * @notice Indexer Agreement Data
+     * @param indexer The address of the indexer
+     * @param payer The address of the payer
      * @param allocationId The allocation ID
      * @param acceptedAt The timestamp when the agreement was accepted
      * @param lastCollectionAt The timestamp when the last collection was made
-     * @param tokensPerSecond The amount of tokens per second
-     * @param tokensPerEntityPerSecond The amount of tokens per entity per second
+     * @param version The indexing agreement version
      */
     struct IndexingAgreementData {
+        address indexer;
+        address payer;
         address allocationId;
         uint256 acceptedAt;
         uint256 lastCollectionAt;
+        IndexingAgreementVersion version;
+    }
+
+    /**
+     * @notice Recurring Collection Agreement metadata
+     * @param subgraphDeploymentId The subgraph deployment ID
+     * @param version The indexing agreement version
+     * @param terms The indexing agreement terms
+     */
+    struct RCAIndexingAgreementMetadata {
+        bytes32 subgraphDeploymentId;
+        IndexingAgreementVersion version;
+        bytes terms;
+    }
+
+    /**
+     * @notice Indexing Agreement Terms (Version 1)
+     * @param tokensPerSecond The amount of tokens per second
+     * @param tokensPerEntityPerSecond The amount of tokens per entity per second
+     */
+    struct IndexingAgreementTermsV1 {
         uint256 tokensPerSecond;
         uint256 tokensPerEntityPerSecond;
     }
 
     /**
-     * @notice Recurrent Collection Voucher metada
-     * @param tokensPerSecond The amount of tokens per second
-     * @param tokensPerEntityPerSecond The amount of tokens per entity per second
-     * @param subgraphDeploymentId The subgraph deployment ID
+     * @notice Thrown when the data can't be decoded as expected
+     * @param t The type of data that was expected
+     * @param data The invalid data
      */
-    struct RCVMetadata {
-        uint256 tokensPerSecond;
-        uint256 tokensPerEntityPerSecond;
-        bytes32 subgraphDeploymentId;
-    }
+    error SubgraphServiceDecoderInvalidData(string t, bytes data);
 
     /**
      * @notice Thrown when an agreement is not for the subgraph data service
      * @param agreementDataService The agreement data service
      */
     error SubgraphServiceIndexingAgreementDataServiceMismatch(address agreementDataService);
-
-    /**
-     * @notice Thrown when the metadata in an agreement is invalid
-     * @param metadata The invalid metadata
-     */
-    error SubgraphServiceInvalidRCVMetadata(bytes metadata);
 
     /**
      * @notice Thrown when an agreement and the allocation correspond to different deployment IDs
@@ -362,31 +368,37 @@ interface ISubgraphService is IDataServiceFees {
 
     /**
      * @notice Thrown when the agreement is already accepted
-     * @param key The agreement key
+     * @param agreementId The agreement ID
      */
-    error SubgraphServiceIndexingAgreementAlreadyAccepted(IndexingAgreementKey key);
+    error SubgraphServiceIndexingAgreementAlreadyAccepted(bytes16 agreementId);
 
     /**
      * @notice Thrown when an allocation already has an active agreement
      * @param allocationId The allocation ID
      */
-    error SubgraphServiceIndexingAgreementAlreadyAllocated(address allocationId);
+    error SubgraphServiceAllocationAlreadyHasIndexingAgreement(address allocationId);
 
     /**
-     * @notice Thrown when caller can not cancel an agreement
-     * @param payer The agreement payer
+     * @notice Thrown when caller or proxy can not cancel an agreement
+     * @param owner The address of the owner of the agreement
      * @param unauthorized The unauthorized caller
      */
-    error SubgraphServiceIndexingAgreementNonCancelableBy(address payer, address unauthorized);
+    error SubgraphServiceIndexingAgreementNonCancelableBy(address owner, address unauthorized);
 
     /**
      * @notice Thrown when the agreement is not active
-     * @param key The agreement key
+     * @param agreementId The agreement ID
      */
-    error SubgraphServiceIndexingAgreementNotActive(IndexingAgreementKey key);
+    error SubgraphServiceIndexingAgreementNotActive(bytes16 agreementId);
 
     /**
-     * @notice Emitted when a subgraph service collects query fees from Graph Payments
+     * @notice Thrown when trying to interact with an agreement with an invalid version
+     * @param version The invalid version
+     */
+    error SubgraphServiceInvalidIndexingAgreementVersion(IndexingAgreementVersion version);
+
+    /**
+     * @notice Emitted when an indexer collects indexing fees from a V1 agreement
      * @param indexer The address of the indexer
      * @param payer The address paying for the indexing fees
      * @param agreementId The id of the agreement
@@ -395,7 +407,7 @@ interface ISubgraphService is IDataServiceFees {
      * @param entities The number of entities indexed
      * @param poi The proof of indexing
      */
-    event IndexingFeesCollected(
+    event IndexingFeesCollectedV1(
         address indexed indexer,
         address indexed payer,
         bytes16 indexed agreementId,
@@ -414,8 +426,8 @@ interface ISubgraphService is IDataServiceFees {
      * @param agreementId The id of the agreement
      * @param allocationId The id of the allocation
      * @param subgraphDeploymentId The id of the subgraph deployment
-     * @param tokensPerSecond The amount of tokens per second
-     * @param tokensPerEntityPerSecond The amount of tokens per entity per second
+     * @param version The version of the indexing agreement
+     * @param versionTerms The version data of the indexing agreement
      */
     event IndexingAgreementAccepted(
         address indexed indexer,
@@ -423,8 +435,8 @@ interface ISubgraphService is IDataServiceFees {
         bytes16 indexed agreementId,
         address allocationId,
         bytes32 subgraphDeploymentId,
-        uint256 tokensPerSecond,
-        uint256 tokensPerEntityPerSecond
+        IndexingAgreementVersion version,
+        bytes versionTerms
     );
 
     /**
@@ -444,15 +456,22 @@ interface ISubgraphService is IDataServiceFees {
     /**
      * @notice Accept an indexing agreement.
      */
-    function acceptIndexingAgreement(address allocationId, IRecurringCollector.SignedRCV calldata signedRCV) external;
+    function acceptIndexingAgreement(address allocationId, IRecurringCollector.SignedRCA calldata signedRCA) external;
+
+    /**
+     * @notice Upgrade an indexing agreement.
+     */
+    function upgradeIndexingAgreement(IRecurringCollector.SignedRCA calldata signedRCA) external;
 
     /**
      * @notice Cancel an indexing agreement by indexer / operator.
      */
-    function cancelIndexingAgreement(address indexer, address payer, bytes16 agreementId) external;
+    function cancelIndexingAgreement(address indexer, bytes16 agreementId) external;
 
     /**
      * @notice Cancel an indexing agreement by payer / signer.
      */
-    function cancelIndexingAgreementByPayer(address indexer, address payer, bytes16 agreementId) external;
+    function cancelIndexingAgreementByPayer(address payer, bytes16 agreementId) external;
+
+    function getIndexingAgreement(bytes16 agreementId) external view returns (IndexingAgreementData memory);
 }
