@@ -1,0 +1,29 @@
+{
+	"name": "Graph Contracts",
+	"dockerComposeFile": [
+		"docker-compose.yml"
+	],
+	"service": "contracts-dev",
+	"features": {
+		"ghcr.io/devcontainers/features/node:1": {
+			"version": "20"
+		},
+		"ghcr.io/devcontainers/features/git:1": {},
+		"ghcr.io/devcontainers/features/common-utils:2.5.3": {}
+	},
+	"postCreateCommand": ".devcontainer/setup.sh",
+	"remoteUser": "vscode",
+	"workspaceFolder": "/git/graphprotocol/contracts",
+	"customizations": {
+		"vscode": {
+			"extensions": [
+				"yzhang.markdown-all-in-one",
+				"DavidAnson.vscode-markdownlint",
+				"bierner.markdown-preview-github-styles",
+				"ms-azuretools.vscode-docker",
+				"donjayamanne.githistory",
+				"eamodio.gitlens"
+			]
+		}
+	}
+}

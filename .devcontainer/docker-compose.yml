@@ -1,0 +1,10 @@
+services:
+  contracts-dev:
+    container_name: contracts-dev
+    image: mcr.microsoft.com/devcontainers/base:debian
+    command: ["sleep", "infinity"]
+    volumes:
+      - npms-cache:/root/.npm
+      - /git:/git
+volumes:
+  npms-cache:
