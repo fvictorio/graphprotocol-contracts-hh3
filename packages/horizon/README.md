@@ -33,6 +33,7 @@ yarn build
 Note that this instructions will help you deploy Graph Horizon contracts, but no data service will be deployed. If you want to deploy the Subgraph Service please refer to the [Subgraph Service README](../subgraph-service/README.md) for deploy instructions.
 
 ### New deployment
+
 To deploy Graph Horizon from scratch run the following command:
 
 ```bash
@@ -40,6 +41,7 @@ npx hardhat deploy:protocol --network hardhat
 ```
 
 ### Upgrade deployment
+
 Usually you would run this against a network (or a fork) where the original Graph Protocol was previously deployed. To upgrade an existing deployment of the original Graph Protocol to Graph Horizon, run the following commands. Note that some steps might need to be run by different accounts (deployer vs governor):
 
 ```bash
