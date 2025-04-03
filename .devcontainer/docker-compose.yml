@@ -3,6 +3,8 @@ services:
     container_name: contracts-dev
     image: mcr.microsoft.com/devcontainers/base:debian
     command: ["sleep", "infinity"]
+    env_file:
+      - /opt/configs/graphprotocol/contracts/.env
     volumes:
       - npms-cache:/root/.npm
       - /git:/git
