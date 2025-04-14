@@ -2,12 +2,12 @@
 
 pragma solidity 0.8.27;
 
-import { IGraphToken } from "@graphprotocol/contracts/contracts/token/IGraphToken.sol";
+import { IGraphToken } from "../interfaces/IGraphToken.sol";
 import { IHorizonStakingMain } from "../interfaces/internal/IHorizonStakingMain.sol";
 import { IHorizonStakingExtension } from "../interfaces/internal/IHorizonStakingExtension.sol";
 import { IGraphPayments } from "../interfaces/IGraphPayments.sol";
 
-import { TokenUtils } from "@graphprotocol/contracts/contracts/utils/TokenUtils.sol";
+import { TokenUtils } from "../libraries/TokenUtils.sol";
 import { MathUtils } from "../libraries/MathUtils.sol";
 import { PPMMath } from "../libraries/PPMMath.sol";
 import { LinkedList } from "../libraries/LinkedList.sol";

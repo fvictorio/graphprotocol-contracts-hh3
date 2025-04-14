@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 pragma solidity 0.8.27;
 
-import { IGraphToken } from "@graphprotocol/contracts/contracts/token/IGraphToken.sol";
+import { IGraphToken } from "../interfaces/IGraphToken.sol";
 import { IGraphPayments } from "../interfaces/IGraphPayments.sol";
 import { IPaymentsEscrow } from "../interfaces/IPaymentsEscrow.sol";
 
 import { Initializable } from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import { MulticallUpgradeable } from "@openzeppelin/contracts-upgradeable/utils/MulticallUpgradeable.sol";
-import { TokenUtils } from "@graphprotocol/contracts/contracts/utils/TokenUtils.sol";
+import { TokenUtils } from "../libraries/TokenUtils.sol";
 
 import { GraphDirectory } from "../utilities/GraphDirectory.sol";
 

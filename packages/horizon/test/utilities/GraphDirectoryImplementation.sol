@@ -2,7 +2,7 @@
 
 pragma solidity 0.8.27;
 
-import { IGraphToken } from "@graphprotocol/contracts/contracts/token/IGraphToken.sol";
+import { IGraphToken } from "../../contracts/interfaces/IGraphToken.sol";
 import { IHorizonStaking } from "../../contracts/interfaces/IHorizonStaking.sol";
 import { IGraphPayments } from "../../contracts/interfaces/IGraphPayments.sol";
 import { IPaymentsEscrow } from "../../contracts/interfaces/IPaymentsEscrow.sol";

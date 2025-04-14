@@ -3,11 +3,11 @@
 pragma solidity 0.8.27;
 
 import { ICuration } from "@graphprotocol/contracts/contracts/curation/ICuration.sol";
-import { IGraphToken } from "@graphprotocol/contracts/contracts/token/IGraphToken.sol";
+import { IGraphToken } from "../interfaces/IGraphToken.sol";
 import { IHorizonStakingExtension } from "../interfaces/internal/IHorizonStakingExtension.sol";
 import { IRewardsIssuer } from "@graphprotocol/contracts/contracts/rewards/IRewardsIssuer.sol";
 
-import { TokenUtils } from "@graphprotocol/contracts/contracts/utils/TokenUtils.sol";
+import { TokenUtils } from "../libraries/TokenUtils.sol";
 import { MathUtils } from "../libraries/MathUtils.sol";
 import { ExponentialRebates } from "./libraries/ExponentialRebates.sol";
 import { PPMMath } from "../libraries/PPMMath.sol";
