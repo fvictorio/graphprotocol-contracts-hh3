@@ -14,11 +14,14 @@
 //   require('hardhat-graph-protocol')
 //   require('./tasks/deploy')
 // }
-
+import  HardhatIgnition  from '@nomicfoundation/hardhat-ignition'
 
 import { HardhatUserConfig } from "hardhat/config"
 
 const config: HardhatUserConfig = {
+  plugins: [
+    HardhatIgnition
+  ],
   solidity: {
     version: '0.8.27',
     settings: {

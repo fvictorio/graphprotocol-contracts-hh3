@@ -61,6 +61,7 @@
     ]
   },
   "dependencies": {
+    "@nomicfoundation/hardhat-ignition": "^3.0.0-next.4",
     "hardhat": "^3.0.0-next.4"
   }
 }

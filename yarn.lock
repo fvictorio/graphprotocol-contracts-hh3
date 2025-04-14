@@ -3119,9 +3119,9 @@ __metadata:
   dependencies:
     "@defi-wonderland/natspec-smells": "npm:^1.1.6"
     "@graphprotocol/contracts": "workspace:^7.0.0"
+    "@nomicfoundation/hardhat-ignition": "npm:^3.0.0-next.4"
     "@openzeppelin/contracts": "npm:^5.0.2"
     "@openzeppelin/contracts-upgradeable": "npm:^5.0.2"
-    "@openzeppelin/foundry-upgrades": "npm:^0.4.0"
     "@typechain/ethers-v6": "npm:^0.5.0"
     "@types/chai": "npm:^4.2.0"
     "@types/mocha": "npm:>=9.1.0"
@@ -5194,6 +5194,24 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@nomicfoundation/hardhat-ignition@npm:^3.0.0-next.4":
+  version: 3.0.0-next.4
+  resolution: "@nomicfoundation/hardhat-ignition@npm:3.0.0-next.4"
+  dependencies:
+    "@nomicfoundation/hardhat-errors": "npm:^3.0.0-next.4"
+    "@nomicfoundation/hardhat-utils": "npm:^3.0.0-next.4"
+    "@nomicfoundation/ignition-core": "npm:^3.0.0-next.4"
+    "@nomicfoundation/ignition-ui": "npm:^3.0.0-next.4"
+    chalk: "npm:^5.3.0"
+    debug: "npm:^4.3.2"
+    json5: "npm:^2.2.3"
+    prompts: "npm:^2.4.2"
+  peerDependencies:
+    hardhat: ^3.0.0-next.4
+  checksum: 10c0/631853448103b609068bc76554d1cd9c0637dca9691c574d2cbc52b8a5ecd4cf4101ac4d26adae0baadbe6c69486391af6b48f2260dba3556e5f15ff6055d509
+  languageName: node
+  linkType: hard
+
 "@nomicfoundation/hardhat-network-helpers@npm:^1.0.0, @nomicfoundation/hardhat-network-helpers@npm:^1.0.9":
   version: 1.0.10
   resolution: "@nomicfoundation/hardhat-network-helpers@npm:1.0.10"
@@ -5312,10 +5330,35 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@nomicfoundation/ignition-core@npm:^3.0.0-next.4":
+  version: 3.0.0-next.4
+  resolution: "@nomicfoundation/ignition-core@npm:3.0.0-next.4"
+  dependencies:
+    "@ethersproject/address": "npm:5.6.1"
+    "@nomicfoundation/hardhat-errors": "npm:^3.0.0-next.4"
+    "@nomicfoundation/hardhat-utils": "npm:^3.0.0-next.4"
+    "@nomicfoundation/solidity-analyzer": "npm:^0.1.1"
+    cbor2: "npm:^1.9.0"
+    debug: "npm:^4.3.2"
+    ethers: "npm:^6.13.4"
+    immer: "npm:10.0.2"
+    lodash-es: "npm:4.17.21"
+    ndjson: "npm:2.0.0"
+  checksum: 10c0/8aa38f45a7ee83fbccee6e1a6bed3119d99f26d9e581121a7cccc4a0b61ebe675138b947da5a13c4775b9330d4e61c7fd162752caa3df5276aa0623bc74a12f7
+  languageName: node
+  linkType: hard
+
 "@nomicfoundation/ignition-ui@npm:^0.15.9":
   version: 0.15.9
   resolution: "@nomicfoundation/ignition-ui@npm:0.15.9"
   checksum: 10c0/88097576c4186bfdf365f4864463386e7a345be1f8c0b8eebe589267e782735f8cec55e1c5af6c0f0872ba111d79616422552dc7e26c643d01b1768a2b0fb129
+  languageName: node
+  linkType: hard
+
+"@nomicfoundation/ignition-ui@npm:^3.0.0-next.4":
+  version: 3.0.0-next.4
+  resolution: "@nomicfoundation/ignition-ui@npm:3.0.0-next.4"
+  checksum: 10c0/01cf9b21be28492ea79d3638ca668de8333668d795e4465fc4317da5e3e48e48ef83f9e69e169ed99a992926867e6d281c1bca05d0229f4760b47482bfce5c96
   languageName: node
   linkType: hard
 
@@ -6048,16 +6091,6 @@ __metadata:
     lodash: "npm:^4.17.19"
     node-fetch: "npm:^2.6.0"
   checksum: 10c0/636614a8012cfbbe065b8ccc3ef6a16635e2f1b48f7421242de81f74def99a51795464e9a2bd02e7305ff32b339a8847d7733452e6fe7810d4badd0c2086c38f
-  languageName: node
-  linkType: hard
-
-"@openzeppelin/foundry-upgrades@npm:^0.4.0":
-  version: 0.4.0
-  resolution: "@openzeppelin/foundry-upgrades@npm:0.4.0"
-  peerDependencies:
-    "@openzeppelin/defender-deploy-client-cli": 0.0.1-alpha.10
-    "@openzeppelin/upgrades-core": ^1.37.0
-  checksum: 10c0/8138da864358dd9b6eea05cd973a9bfcc29a1e1e47cd724250c508a1d0be8378b7b5190e046f1293f4981218b8cfb16ab9155f681cf9d820a6a695044bc2f5f8
   languageName: node
   linkType: hard
 
@@ -10328,6 +10361,13 @@ __metadata:
   version: 2.1.1
   resolution: "catering@npm:2.1.1"
   checksum: 10c0/a69f946f82cba85509abcb399759ed4c39d2cc9e33ba35674f242130c1b3c56673da3c3e85804db6898dfd966c395aa128ba484b31c7b906cc2faca6a581e133
+  languageName: node
+  linkType: hard
+
+"cbor2@npm:^1.9.0":
+  version: 1.12.0
+  resolution: "cbor2@npm:1.12.0"
+  checksum: 10c0/c0d9e69e4a6176fb2d6658dcfe723dcb2732df29b2d4f11f7a7dc76ff618ea761f1f218582bf932dbe8d7fed54a9abd1bc72821a242f0bd81c8a4fdf621f0c87
   languageName: node
   linkType: hard
 
@@ -18773,6 +18813,13 @@ __metadata:
   dependencies:
     p-locate: "npm:^5.0.0"
   checksum: 10c0/d3972ab70dfe58ce620e64265f90162d247e87159b6126b01314dd67be43d50e96a50b517bce2d9452a79409c7614054c277b5232377de50416564a77ac7aad3
+  languageName: node
+  linkType: hard
+
+"lodash-es@npm:4.17.21":
+  version: 4.17.21
+  resolution: "lodash-es@npm:4.17.21"
+  checksum: 10c0/fb407355f7e6cd523a9383e76e6b455321f0f153a6c9625e21a8827d10c54c2a2341bd2ae8d034358b60e07325e1330c14c224ff582d04612a46a4f0479ff2f2
   languageName: node
   linkType: hard
 
