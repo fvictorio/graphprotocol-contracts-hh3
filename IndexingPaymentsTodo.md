@@ -23,3 +23,4 @@
 * DONE: ~~Make `agreementId` unique globally so that we don't need the full tuple (`payer`+`indexer`+`agreementId`) as key?~~
 * DONE: ~~Maybe IRecurringCollector.cancel(address payer, address serviceProvider, bytes16 agreementId) should only take in agreementId?~~
 * DONE: ~~Unify to one error in Decoder.sol~~
+* Missing events for accept, cancel, upgrade RCAs.

@@ -574,7 +574,7 @@ contract SubgraphService is
      * - Agreement must not have been accepted before
      * - Allocation must not have an agreement already
      *
-     * @dev signedRCA.rca.metadata is an encoding of {ISubgraphService.RCAIndexingAgreementMetadata}
+     * @dev signedRCA.rca.metadata is an encoding of {ISubgraphService.AcceptIndexingAgreementMetadata}
      *
      * Emits {IndexingAgreementAccepted} event
      *
@@ -596,7 +596,7 @@ contract SubgraphService is
             SubgraphServiceIndexingAgreementDataServiceMismatch(signedRCA.rca.dataService)
         );
 
-        RCAIndexingAgreementMetadata memory metadata = _decodeRCAMetadata(signedRCA.rca.metadata);
+        AcceptIndexingAgreementMetadata memory metadata = _decodeRCAMetadata(signedRCA.rca.metadata);
         _acceptIndexingAgreement(allocationId, signedRCA, metadata);
 
         emit IndexingAgreementAccepted(
@@ -611,50 +611,33 @@ contract SubgraphService is
     }
 
     function upgradeIndexingAgreement(
-        IRecurringCollector.SignedRCA calldata signedRCA
+        address indexer,
+        IRecurringCollector.SignedRCAU calldata signedRCAU
     )
         external
-        view
         whenNotPaused
-        onlyAuthorizedForProvision(signedRCA.rca.serviceProvider)
-        onlyValidProvision(signedRCA.rca.serviceProvider)
-        onlyRegisteredIndexer(signedRCA.rca.serviceProvider)
+        onlyAuthorizedForProvision(indexer)
+        onlyValidProvision(indexer)
+        onlyRegisteredIndexer(indexer)
     {
+        IndexingAgreementData storage agreement = _getForUpdateIndexingAgreement(signedRCAU.rcau.agreementId);
+        require(_isActiveAgreement(agreement), SubgraphServiceIndexingAgreementNotActive(signedRCAU.rcau.agreementId));
         require(
-            signedRCA.rca.dataService == address(this),
-            SubgraphServiceIndexingAgreementDataServiceMismatch(signedRCA.rca.dataService)
+            agreement.indexer == indexer,
+            SubgraphServiceIndexingAgreementNotAuthorized(signedRCAU.rcau.agreementId, indexer)
         );
 
-        // FIX-ME: Implement me
-        // _cancelIndexingAgreement(signedRCA.rca.payer, signedRCA.rca.serviceProvider, oldAgreementId);
-        // IndexingAgreementKey memory oldKey = IndexingAgreementKey({
-        //     indexer: signedRCA.rca.serviceProvider,
-        //     payer: signedRCA.rca.payer,
-        //     agreementId: oldAgreementId
-        // });
-        // IndexingAgreementData memory oldAgreement = _getIndexingAgreement(oldKey);
+        UpgradeIndexingAgreementMetadata memory metadata = _decodeRCAUMetadata(signedRCAU.rcau.metadata);
 
-        // RCAIndexingAgreementMetadata memory metadata = _decodeRCAMetadata(signedRCA.rca.metadata);
-        // Allocation.State memory allocation = _allocations.get(oldAgreement.allocationId);
-        // require(
-        //     allocation.subgraphDeploymentId == metadata.subgraphDeploymentId,
-        //     SubgraphServiceIndexingAgreementDeploymentIdMismatch(
-        //         metadata.subgraphDeploymentId,
-        //         oldAgreement.allocationId,
-        //         allocation.subgraphDeploymentId
-        //     )
-        // );
+        agreement.version = metadata.version;
 
-        // _acceptIndexingAgreement(oldAgreement.allocationId, signedRCA, metadata);
-        // IndexingAgreementKey memory key = IndexingAgreementKey({
-        //     indexer: signedRCA.rca.serviceProvider,
-        //     payer: signedRCA.rca.payer,
-        //     agreementId: signedRCA.rca.agreementId
-        // });
-        // IndexingAgreementData storage agreement = _getForUpdateIndexingAgreement(key);
+        require(
+            metadata.version == IndexingAgreementVersion.V1,
+            SubgraphServiceInvalidIndexingAgreementVersion(metadata.version)
+        );
+        _setIndexingAgreementTermsV1(signedRCAU.rcau.agreementId, metadata.terms);
 
-        // agreement.acceptedAt = oldAgreement.acceptedAt;
-        // agreement.lastCollectionAt = oldAgreement.lastCollectionAt;
+        _recurringCollector().upgrade(signedRCAU);
     }
 
     /**
@@ -783,7 +766,7 @@ contract SubgraphService is
     function _acceptIndexingAgreement(
         address _allocationId,
         IRecurringCollector.SignedRCA calldata _signedRCA,
-        RCAIndexingAgreementMetadata memory _agreementMetadata
+        AcceptIndexingAgreementMetadata memory _agreementMetadata
     ) private {
         Allocation.State memory allocation = _requireValidAllocation(_allocationId, _signedRCA.rca.serviceProvider);
         require(
@@ -814,16 +797,16 @@ contract SubgraphService is
             _agreementMetadata.version == IndexingAgreementVersion.V1,
             SubgraphServiceInvalidIndexingAgreementVersion(_agreementMetadata.version)
         );
-        _acceptIndexingAgreementTermsV1(_signedRCA.rca.agreementId, _agreementMetadata.terms);
+        _setIndexingAgreementTermsV1(_signedRCA.rca.agreementId, _agreementMetadata.terms);
 
         _recurringCollector().accept(_signedRCA);
     }
 
-    function _acceptIndexingAgreementTermsV1(bytes16 _agreementId, bytes memory _data) private {
-        IndexingAgreementTermsV1 memory agreementTermsV1 = _decodeAcceptIndexingAgreementTermsV1(_data);
-        IndexingAgreementTermsV1 storage termsV1 = _getForUpdateIndexingAgreementTermsV1(_agreementId);
-        termsV1.tokensPerSecond = agreementTermsV1.tokensPerSecond;
-        termsV1.tokensPerEntityPerSecond = agreementTermsV1.tokensPerEntityPerSecond;
+    function _setIndexingAgreementTermsV1(bytes16 _agreementId, bytes memory _data) private {
+        IndexingAgreementTermsV1 memory newTerms = _decodeIndexingAgreementTermsV1(_data);
+        IndexingAgreementTermsV1 storage storedTerms = _getForUpdateIndexingAgreementTermsV1(_agreementId);
+        storedTerms.tokensPerSecond = newTerms.tokensPerSecond;
+        storedTerms.tokensPerEntityPerSecond = newTerms.tokensPerEntityPerSecond;
     }
 
     function _indexingAgreementTokensToCollect(

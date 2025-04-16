@@ -9,22 +9,45 @@ contract Decoder {
     }
 
     /**
-     * @notice Decodes the indexing agreement metadata.
+     * @notice Decodes the RCA metadata.
      *
-     * @param data The data to decode. See {ISubgraphService.RCAIndexingAgreementMetadata}
+     * @param data The data to decode. See {ISubgraphService.AcceptIndexingAgreementMetadata}
      * @return The decoded data
      */
     function decodeRCAMetadata(
         bytes calldata data
-    ) external pure returns (ISubgraphService.RCAIndexingAgreementMetadata memory) {
-        return abi.decode(data, (ISubgraphService.RCAIndexingAgreementMetadata));
+    ) external pure returns (ISubgraphService.AcceptIndexingAgreementMetadata memory) {
+        return abi.decode(data, (ISubgraphService.AcceptIndexingAgreementMetadata));
     }
 
+    /**
+     * @notice Decodes the RCAU metadata.
+     *
+     * @param data The data to decode. See {ISubgraphService.UpgradeIndexingAgreementMetadata}
+     * @return The decoded data
+     */
+    function decodeRCAUMetadata(
+        bytes calldata data
+    ) external pure returns (ISubgraphService.UpgradeIndexingAgreementMetadata memory) {
+        return abi.decode(data, (ISubgraphService.UpgradeIndexingAgreementMetadata));
+    }
+
+    /**
+     * @notice Decodes the collect data for indexing fees V1.
+     *
+     * @param data The data to decode.
+     */
     function decodeCollectIndexingFeeDataV1(bytes memory data) external pure returns (uint256 entities, bytes32 poi) {
         return abi.decode(data, (uint256, bytes32));
     }
 
-    function decodeAcceptIndexingAgreementTermsV1(
+    /**
+     * @notice Decodes the data for indexing agreement terms V1.
+     *
+     * @param data The data to decode. See {ISubgraphService.IndexingAgreementTermsV1}
+     * @return The decoded data
+     */
+    function decodeIndexingAgreementTermsV1(
         bytes memory data
     ) external pure returns (ISubgraphService.IndexingAgreementTermsV1 memory) {
         return abi.decode(data, (ISubgraphService.IndexingAgreementTermsV1));
@@ -40,11 +63,21 @@ contract Decoder {
 
     function _decodeRCAMetadata(
         bytes memory _data
-    ) internal view returns (ISubgraphService.RCAIndexingAgreementMetadata memory) {
-        try this.decodeRCAMetadata(_data) returns (ISubgraphService.RCAIndexingAgreementMetadata memory metadata) {
+    ) internal view returns (ISubgraphService.AcceptIndexingAgreementMetadata memory) {
+        try this.decodeRCAMetadata(_data) returns (ISubgraphService.AcceptIndexingAgreementMetadata memory metadata) {
             return metadata;
         } catch {
             revert ISubgraphService.SubgraphServiceDecoderInvalidData("_decodeRCAMetadata", _data);
+        }
+    }
+
+    function _decodeRCAUMetadata(
+        bytes memory _data
+    ) internal view returns (ISubgraphService.UpgradeIndexingAgreementMetadata memory) {
+        try this.decodeRCAUMetadata(_data) returns (ISubgraphService.UpgradeIndexingAgreementMetadata memory metadata) {
+            return metadata;
+        } catch {
+            revert ISubgraphService.SubgraphServiceDecoderInvalidData("_decodeRCAUMetadata", _data);
         }
     }
 
@@ -56,10 +89,10 @@ contract Decoder {
         }
     }
 
-    function _decodeAcceptIndexingAgreementTermsV1(
+    function _decodeIndexingAgreementTermsV1(
         bytes memory _data
     ) internal view returns (ISubgraphService.IndexingAgreementTermsV1 memory) {
-        try this.decodeAcceptIndexingAgreementTermsV1(_data) returns (
+        try this.decodeIndexingAgreementTermsV1(_data) returns (
             ISubgraphService.IndexingAgreementTermsV1 memory terms
         ) {
             return terms;

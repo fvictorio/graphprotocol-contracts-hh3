@@ -49,6 +49,35 @@ interface IRecurringCollector is IAuthorizable, IPaymentsCollector {
         bytes metadata;
     }
 
+    /// @notice A representation of a signed Recurring Collection Agreement Upgrade (RCAU)
+    struct SignedRCAU {
+        // The RCAU
+        RecurringCollectionAgreementUpgrade rcau;
+        // Signature - 65 bytes: r (32 Bytes) || s (32 Bytes) || v (1 Byte)
+        bytes signature;
+    }
+
+    struct RecurringCollectionAgreementUpgrade {
+        // The agreement ID of the RCA
+        bytes16 agreementId;
+        // The deadline for accepting the RCA
+        uint256 acceptDeadline;
+        // The duration of the agreement in seconds
+        uint256 duration;
+        // The maximum amount of tokens that can be collected in the first collection
+        // on top of the amount allowed for subsequent collections
+        uint256 maxInitialTokens;
+        // The maximum amount of tokens that can be collected per second
+        // except for the first collection
+        uint256 maxOngoingTokensPerSecond;
+        // The minimum amount of seconds that must pass between collections
+        uint32 minSecondsPerCollection;
+        // The maximum amount of seconds that can pass between collections
+        uint32 maxSecondsPerCollection;
+        // Arbitrary metadata to extend functionality if a data service requires it
+        bytes metadata;
+    }
+
     /// @notice The data for an agreement
     struct AgreementData {
         // The address of the data service
@@ -73,8 +102,6 @@ interface IRecurringCollector is IAuthorizable, IPaymentsCollector {
         uint32 minSecondsPerCollection;
         // The maximum amount of seconds that can pass between collections
         uint32 maxSecondsPerCollection;
-        // The agreement ID of the previous agreement
-        bytes16 updatedFromAgreementId;
     }
 
     /// @notice The params for collecting an agreement
@@ -117,9 +144,9 @@ interface IRecurringCollector is IAuthorizable, IPaymentsCollector {
     error RecurringCollectorAgreementAcceptanceElapsed(uint256 elapsedAt);
 
     /**
-     * Thrown when the RCA signer is invalid
+     * Thrown when the signer is invalid
      */
-    error RecurringCollectorInvalidRCASigner();
+    error RecurringCollectorInvalidSigner();
 
     /**
      * Thrown when the payment type is not IndexingFee
@@ -194,7 +221,7 @@ interface IRecurringCollector is IAuthorizable, IPaymentsCollector {
      * @dev Accept an indexing agreement.
      * @param signedRCA The signed Recurring Collection Agreement which is to be accepted.
      */
-    function accept(SignedRCA memory signedRCA) external;
+    function accept(SignedRCA calldata signedRCA) external;
 
     /**
      * @dev Cancel an indexing agreement.
@@ -205,7 +232,7 @@ interface IRecurringCollector is IAuthorizable, IPaymentsCollector {
     /**
      * @dev Upgrade an indexing agreement.
      */
-    function upgrade() external;
+    function upgrade(SignedRCAU calldata signedRCAU) external;
 
     /**
      * @dev Computes the hash of a RecurringCollectionAgreement (RCA).
@@ -215,9 +242,23 @@ interface IRecurringCollector is IAuthorizable, IPaymentsCollector {
     function encodeRCA(RecurringCollectionAgreement calldata rca) external view returns (bytes32);
 
     /**
+     * @dev Computes the hash of a RecurringCollectionAgreementUpgrade (RCAU).
+     * @param rcau The RCAU for which to compute the hash.
+     * @return The hash of the RCAU.
+     */
+    function encodeRCAU(RecurringCollectionAgreementUpgrade calldata rcau) external view returns (bytes32);
+
+    /**
      * @dev Recovers the signer address of a signed RecurringCollectionAgreement (RCA).
      * @param signedRCA The SignedRCA containing the RCA and its signature.
      * @return The address of the signer.
      */
     function recoverRCASigner(SignedRCA calldata signedRCA) external view returns (address);
+
+    /**
+     * @dev Recovers the signer address of a signed RecurringCollectionAgreementUpgrade (RCAU).
+     * @param signedRCAU The SignedRCAU containing the RCAU and its signature.
+     * @return The address of the signer.
+     */
+    function recoverRCAUSigner(SignedRCAU calldata signedRCAU) external view returns (address);
 }

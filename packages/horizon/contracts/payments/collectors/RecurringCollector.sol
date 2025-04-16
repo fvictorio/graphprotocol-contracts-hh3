@@ -26,6 +26,12 @@ contract RecurringCollector is EIP712, GraphDirectory, Authorizable, IRecurringC
             "RecurringCollectionAgreement(bytes16 agreementId,uint256 acceptDeadline,uint256 duration,address payer,address dataService,address serviceProvider,uint256 maxInitialTokens,uint256 maxOngoingTokensPerSecond,uint32 minSecondsPerCollection,uint32 maxSecondsPerCollection,bytes metadata)"
         );
 
+    /// @notice The EIP712 typehash for the RecurringCollectionAgreementUpgrade struct
+    bytes32 public constant EIP712_RCAU_TYPEHASH =
+        keccak256(
+            "RecurringCollectionAgreementUpgrade(bytes16 agreementId,uint256 acceptDeadline,uint256 duration,uint256 maxInitialTokens,uint256 maxOngoingTokensPerSecond,uint32 minSecondsPerCollection,uint32 maxSecondsPerCollection,bytes metadata)"
+        );
+
     /// @notice Sentinel value to indicate an agreement has been canceled
     uint256 public constant CANCELED = type(uint256).max;
 
@@ -68,7 +74,7 @@ contract RecurringCollector is EIP712, GraphDirectory, Authorizable, IRecurringC
      * See {IRecurringCollector.accept}.
      * @dev Caller must be the data service the RCA was issued to.
      */
-    function accept(SignedRCA memory signedRCA) external {
+    function accept(SignedRCA calldata signedRCA) external {
         require(
             msg.sender == signedRCA.rca.dataService,
             RecurringCollectorCallerNotDataService(msg.sender, signedRCA.rca.dataService)
@@ -116,10 +122,31 @@ contract RecurringCollector is EIP712, GraphDirectory, Authorizable, IRecurringC
     /**
      * @notice Upgrade an indexing agreement.
      * See {IRecurringCollector.upgrade}.
-     * @dev Caller must be the data service the RCA was issued to.
+     * @dev Caller must be the data service for the agreement.
      */
-    function upgrade() external {
-        // FIX-ME: implement me
+    function upgrade(SignedRCAU calldata signedRCAU) external {
+        require(
+            signedRCAU.rcau.acceptDeadline >= block.timestamp,
+            RecurringCollectorAgreementAcceptanceElapsed(signedRCAU.rcau.acceptDeadline)
+        );
+
+        AgreementData storage agreement = _getForUpdateAgreement(signedRCAU.rcau.agreementId);
+        require(agreement.acceptedAt > 0, RecurringCollectorAgreementNeverAccepted(signedRCAU.rcau.agreementId));
+        require(
+            agreement.dataService == msg.sender,
+            RecurringCollectorDataServiceNotAuthorized(signedRCAU.rcau.agreementId, msg.sender)
+        );
+
+        // check that the voucher is signed by the payer (or proxy)
+        _requireAuthorizedRCAUSigner(signedRCAU, agreement.payer);
+
+        // upgrade the agreement
+        // FIX-ME: These need to be validated to something that makes sense for the contract
+        agreement.duration = signedRCAU.rcau.duration;
+        agreement.maxInitialTokens = signedRCAU.rcau.maxInitialTokens;
+        agreement.maxOngoingTokensPerSecond = signedRCAU.rcau.maxOngoingTokensPerSecond;
+        agreement.minSecondsPerCollection = signedRCAU.rcau.minSecondsPerCollection;
+        agreement.maxSecondsPerCollection = signedRCAU.rcau.maxSecondsPerCollection;
     }
 
     /**
@@ -130,10 +157,24 @@ contract RecurringCollector is EIP712, GraphDirectory, Authorizable, IRecurringC
     }
 
     /**
+     * @notice See {IRecurringCollector.recoverRCAUSigner}
+     */
+    function recoverRCAUSigner(SignedRCAU calldata signedRCAU) external view returns (address) {
+        return _recoverRCAUSigner(signedRCAU);
+    }
+
+    /**
      * @notice See {IRecurringCollector.encodeRCA}
      */
     function encodeRCA(RecurringCollectionAgreement calldata rca) external view returns (bytes32) {
         return _encodeRCA(rca);
+    }
+
+    /**
+     * @notice See {IRecurringCollector.encodeRCAU}
+     */
+    function encodeRCAU(RecurringCollectionAgreementUpgrade calldata rcau) external view returns (bytes32) {
+        return _encodeRCAU(rcau);
     }
 
     /**
@@ -236,6 +277,14 @@ contract RecurringCollector is EIP712, GraphDirectory, Authorizable, IRecurringC
     }
 
     /**
+     * @notice See {IRecurringCollector.recoverRCAUSigner}
+     */
+    function _recoverRCAUSigner(SignedRCAU memory _signedRCAU) private view returns (address) {
+        bytes32 messageHash = _encodeRCAU(_signedRCAU.rcau);
+        return ECDSA.recover(messageHash, _signedRCAU.signature);
+    }
+
+    /**
      * @notice See {IRecurringCollector.encodeRCA}
      */
     function _encodeRCA(RecurringCollectionAgreement memory _rca) private view returns (bytes32) {
@@ -261,12 +310,48 @@ contract RecurringCollector is EIP712, GraphDirectory, Authorizable, IRecurringC
     }
 
     /**
+     * @notice See {IRecurringCollector.encodeRCAU}
+     */
+    function _encodeRCAU(RecurringCollectionAgreementUpgrade memory _rcau) private view returns (bytes32) {
+        return
+            _hashTypedDataV4(
+                keccak256(
+                    abi.encode(
+                        EIP712_RCAU_TYPEHASH,
+                        _rcau.agreementId,
+                        _rcau.acceptDeadline,
+                        _rcau.duration,
+                        _rcau.maxInitialTokens,
+                        _rcau.maxOngoingTokensPerSecond,
+                        _rcau.minSecondsPerCollection,
+                        _rcau.maxSecondsPerCollection,
+                        keccak256(_rcau.metadata)
+                    )
+                )
+            );
+    }
+
+    /**
      * @notice Requires that the signer for the RCA is authorized
      * by the payer of the RCA.
      */
     function _requireAuthorizedRCASigner(SignedRCA memory _signedRCA) private view returns (address) {
         address signer = _recoverRCASigner(_signedRCA);
-        require(_isAuthorized(_signedRCA.rca.payer, signer), RecurringCollectorInvalidRCASigner());
+        require(_isAuthorized(_signedRCA.rca.payer, signer), RecurringCollectorInvalidSigner());
+
+        return signer;
+    }
+
+    /**
+     * @notice Requires that the signer for the RCAU is authorized
+     * by the payer.
+     */
+    function _requireAuthorizedRCAUSigner(
+        SignedRCAU memory _signedRCAU,
+        address _payer
+    ) private view returns (address) {
+        address signer = _recoverRCAUSigner(_signedRCAU);
+        require(_isAuthorized(_payer, signer), RecurringCollectorInvalidSigner());
 
         return signer;
     }

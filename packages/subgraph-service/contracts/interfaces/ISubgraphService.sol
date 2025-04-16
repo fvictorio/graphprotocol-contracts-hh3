@@ -320,13 +320,23 @@ interface ISubgraphService is IDataServiceFees {
     }
 
     /**
-     * @notice Recurring Collection Agreement metadata
+     * @notice Accept Indexing Agreement metadata
      * @param subgraphDeploymentId The subgraph deployment ID
      * @param version The indexing agreement version
      * @param terms The indexing agreement terms
      */
-    struct RCAIndexingAgreementMetadata {
+    struct AcceptIndexingAgreementMetadata {
         bytes32 subgraphDeploymentId;
+        IndexingAgreementVersion version;
+        bytes terms;
+    }
+
+    /**
+     * @notice Upgrade Indexing Agreement metadata
+     * @param version The indexing agreement version
+     * @param terms The indexing agreement terms
+     */
+    struct UpgradeIndexingAgreementMetadata {
         IndexingAgreementVersion version;
         bytes terms;
     }
@@ -398,6 +408,13 @@ interface ISubgraphService is IDataServiceFees {
     error SubgraphServiceInvalidIndexingAgreementVersion(IndexingAgreementVersion version);
 
     /**
+     * @notice Thrown when trying to interact with an agreement not owned by the indexer
+     * @param agreementId The agreement ID
+     * @param unauthorizedIndexer The unauthorized indexer
+     */
+    error SubgraphServiceIndexingAgreementNotAuthorized(bytes16 agreementId, address unauthorizedIndexer);
+
+    /**
      * @notice Emitted when an indexer collects indexing fees from a V1 agreement
      * @param indexer The address of the indexer
      * @param payer The address paying for the indexing fees
@@ -461,7 +478,7 @@ interface ISubgraphService is IDataServiceFees {
     /**
      * @notice Upgrade an indexing agreement.
      */
-    function upgradeIndexingAgreement(IRecurringCollector.SignedRCA calldata signedRCA) external;
+    function upgradeIndexingAgreement(address indexer, IRecurringCollector.SignedRCAU calldata signedRCAU) external;
 
     /**
      * @notice Cancel an indexing agreement by indexer / operator.

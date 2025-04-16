@@ -58,7 +58,7 @@ contract SubgraphServiceIndexingAgreementSharedTest is SubgraphServiceTest, Boun
         TestIndexerParams memory _params,
         IRecurringCollector.SignedRCA memory _signedRCA
     ) internal returns (IRecurringCollector.SignedRCA memory) {
-        ISubgraphService.RCAIndexingAgreementMetadata memory metadata = _createRCAMetadataV1(
+        ISubgraphService.AcceptIndexingAgreementMetadata memory metadata = _createRCAMetadataV1(
             _params.subgraphDeploymentId
         );
         _signedRCA.rca.serviceProvider = _params.indexer;
@@ -181,9 +181,9 @@ contract SubgraphServiceIndexingAgreementSharedTest is SubgraphServiceTest, Boun
 
     function _createRCAMetadataV1(
         bytes32 _subgraphDeploymentId
-    ) internal pure returns (ISubgraphService.RCAIndexingAgreementMetadata memory) {
+    ) internal pure returns (ISubgraphService.AcceptIndexingAgreementMetadata memory) {
         return
-            ISubgraphService.RCAIndexingAgreementMetadata({
+            ISubgraphService.AcceptIndexingAgreementMetadata({
                 subgraphDeploymentId: _subgraphDeploymentId,
                 version: ISubgraphService.IndexingAgreementVersion.V1,
                 terms: abi.encode(
@@ -206,7 +206,7 @@ contract SubgraphServiceIndexingAgreementSharedTest is SubgraphServiceTest, Boun
     ) internal pure returns (bytes memory) {
         return
             abi.encode(
-                ISubgraphService.RCAIndexingAgreementMetadata({
+                ISubgraphService.AcceptIndexingAgreementMetadata({
                     subgraphDeploymentId: _subgraphDeploymentId,
                     version: ISubgraphService.IndexingAgreementVersion.V1,
                     terms: abi.encode(_params)
