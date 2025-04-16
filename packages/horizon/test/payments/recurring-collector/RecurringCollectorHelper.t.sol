@@ -28,4 +28,19 @@ contract RecurringCollectorHelper is AuthorizableHelper {
 
         return signedRCA;
     }
+
+    function generateSignedRCAU(
+        IRecurringCollector.RecurringCollectionAgreementUpgrade memory rcau,
+        uint256 signerPrivateKey
+    ) public view returns (IRecurringCollector.SignedRCAU memory) {
+        bytes32 messageHash = collector.encodeRCAU(rcau);
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(signerPrivateKey, messageHash);
+        bytes memory signature = abi.encodePacked(r, s, v);
+        IRecurringCollector.SignedRCAU memory signedRCAU = IRecurringCollector.SignedRCAU({
+            rcau: rcau,
+            signature: signature
+        });
+
+        return signedRCAU;
+    }
 }

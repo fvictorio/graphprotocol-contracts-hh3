@@ -29,7 +29,7 @@ contract RecurringCollector is EIP712, GraphDirectory, Authorizable, IRecurringC
     /// @notice The EIP712 typehash for the RecurringCollectionAgreementUpgrade struct
     bytes32 public constant EIP712_RCAU_TYPEHASH =
         keccak256(
-            "RecurringCollectionAgreementUpgrade(bytes16 agreementId,uint256 acceptDeadline,uint256 duration,uint256 maxInitialTokens,uint256 maxOngoingTokensPerSecond,uint32 minSecondsPerCollection,uint32 maxSecondsPerCollection,bytes metadata)"
+            "RecurringCollectionAgreementUpgrade(bytes16 agreementId,uint256 upgradeDeadline,uint256 duration,uint256 maxInitialTokens,uint256 maxOngoingTokensPerSecond,uint32 minSecondsPerCollection,uint32 maxSecondsPerCollection,bytes metadata)"
         );
 
     /// @notice Sentinel value to indicate an agreement has been canceled
@@ -126,8 +126,8 @@ contract RecurringCollector is EIP712, GraphDirectory, Authorizable, IRecurringC
      */
     function upgrade(SignedRCAU calldata signedRCAU) external {
         require(
-            signedRCAU.rcau.acceptDeadline >= block.timestamp,
-            RecurringCollectorAgreementAcceptanceElapsed(signedRCAU.rcau.acceptDeadline)
+            signedRCAU.rcau.upgradeDeadline >= block.timestamp,
+            RecurringCollectorAgreementUpgradeElapsed(signedRCAU.rcau.upgradeDeadline)
         );
 
         AgreementData storage agreement = _getForUpdateAgreement(signedRCAU.rcau.agreementId);
@@ -175,6 +175,13 @@ contract RecurringCollector is EIP712, GraphDirectory, Authorizable, IRecurringC
      */
     function encodeRCAU(RecurringCollectionAgreementUpgrade calldata rcau) external view returns (bytes32) {
         return _encodeRCAU(rcau);
+    }
+
+    /**
+     * @notice See {IRecurringCollector.getAgreement}
+     */
+    function getAgreement(bytes16 agreementId) external view returns (AgreementData memory) {
+        return _getAgreement(agreementId);
     }
 
     /**
@@ -319,7 +326,7 @@ contract RecurringCollector is EIP712, GraphDirectory, Authorizable, IRecurringC
                     abi.encode(
                         EIP712_RCAU_TYPEHASH,
                         _rcau.agreementId,
-                        _rcau.acceptDeadline,
+                        _rcau.upgradeDeadline,
                         _rcau.duration,
                         _rcau.maxInitialTokens,
                         _rcau.maxOngoingTokensPerSecond,
@@ -364,7 +371,7 @@ contract RecurringCollector is EIP712, GraphDirectory, Authorizable, IRecurringC
     }
 
     /**
-     * @notice Gets an agreement.
+     * @notice See {IRecurringCollector.getAgreement}
      */
     function _getAgreement(bytes16 _agreementId) private view returns (AgreementData memory) {
         return agreements[_agreementId];

@@ -58,10 +58,10 @@ interface IRecurringCollector is IAuthorizable, IPaymentsCollector {
     }
 
     struct RecurringCollectionAgreementUpgrade {
-        // The agreement ID of the RCA
+        // The agreement ID
         bytes16 agreementId;
-        // The deadline for accepting the RCA
-        uint256 acceptDeadline;
+        // The deadline for upgrading
+        uint256 upgradeDeadline;
         // The duration of the agreement in seconds
         uint256 duration;
         // The maximum amount of tokens that can be collected in the first collection
@@ -142,6 +142,12 @@ interface IRecurringCollector is IAuthorizable, IPaymentsCollector {
      * @param elapsedAt The timestamp when the acceptance deadline elapsed
      */
     error RecurringCollectorAgreementAcceptanceElapsed(uint256 elapsedAt);
+
+    /**
+     * Thrown when calling upgrade() for an agreement with an elapsed upgrade deadline
+     * @param elapsedAt The timestamp when the upgrade deadline elapsed
+     */
+    error RecurringCollectorAgreementUpgradeElapsed(uint256 elapsedAt);
 
     /**
      * Thrown when the signer is invalid
@@ -261,4 +267,9 @@ interface IRecurringCollector is IAuthorizable, IPaymentsCollector {
      * @return The address of the signer.
      */
     function recoverRCAUSigner(SignedRCAU calldata signedRCAU) external view returns (address);
+
+    /**
+     * @notice Gets an agreement.
+     */
+    function getAgreement(bytes16 agreementId) external view returns (AgreementData memory);
 }
