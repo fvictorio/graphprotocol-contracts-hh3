@@ -4,8 +4,9 @@ pragma solidity 0.8.27;
 import { IRecurringCollector } from "../../../contracts/interfaces/IRecurringCollector.sol";
 import { RecurringCollector } from "../../../contracts/payments/collectors/RecurringCollector.sol";
 import { AuthorizableHelper } from "../../utilities/Authorizable.t.sol";
+import { Bounder } from "../../utils/Bounder.t.sol";
 
-contract RecurringCollectorHelper is AuthorizableHelper {
+contract RecurringCollectorHelper is AuthorizableHelper, Bounder {
     RecurringCollector public collector;
 
     constructor(
@@ -42,5 +43,20 @@ contract RecurringCollectorHelper is AuthorizableHelper {
         });
 
         return signedRCAU;
+    }
+
+    function withElapsedAcceptDeadline(
+        IRecurringCollector.RecurringCollectionAgreement memory rca
+    ) public view returns (IRecurringCollector.RecurringCollectionAgreement memory) {
+        require(block.timestamp > 0, "block.timestamp can't be zero");
+        rca.acceptDeadline = bound(rca.acceptDeadline, 0, block.timestamp - 1);
+        return rca;
+    }
+
+    function withOKAcceptDeadline(
+        IRecurringCollector.RecurringCollectionAgreement memory rca
+    ) public view returns (IRecurringCollector.RecurringCollectionAgreement memory) {
+        rca.acceptDeadline = boundTimestampMin(rca.acceptDeadline, block.timestamp);
+        return rca;
     }
 }
