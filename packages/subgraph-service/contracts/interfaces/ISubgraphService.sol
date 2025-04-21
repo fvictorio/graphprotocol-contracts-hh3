@@ -352,6 +352,13 @@ interface ISubgraphService is IDataServiceFees {
     }
 
     /**
+     * @notice Thrown when collecting on an invalid epoch
+     * @param current The current epoch
+     * @param invalid The invalid epoch
+     */
+    error SubgraphServiceInvalidEpoch(uint256 current, uint256 invalid);
+
+    /**
      * @notice Thrown when the data can't be decoded as expected
      * @param t The type of data that was expected
      * @param data The invalid data

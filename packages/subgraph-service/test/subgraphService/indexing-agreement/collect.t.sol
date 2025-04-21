@@ -3,7 +3,6 @@ pragma solidity 0.8.27;
 
 import { IGraphPayments } from "@graphprotocol/horizon/contracts/interfaces/IGraphPayments.sol";
 import { IRecurringCollector } from "@graphprotocol/horizon/contracts/interfaces/IRecurringCollector.sol";
-import { IPaymentsCollector } from "@graphprotocol/horizon/contracts/interfaces/IPaymentsCollector.sol";
 import { PausableUpgradeable } from "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
 import { ProvisionManager } from "@graphprotocol/horizon/contracts/data-service/utilities/ProvisionManager.sol";
 
@@ -38,15 +37,7 @@ contract SubgraphServiceIndexingAgreementCollectTest is SubgraphServiceIndexingA
             })
         );
         uint256 tokensCollected = bound(unboundedTokensCollected, 1, params.tokens / stakeToFeesRatio);
-        vm.mockCall(
-            address(recurringCollector),
-            abi.encodeWithSelector(IPaymentsCollector.collect.selector, IGraphPayments.PaymentTypes.IndexingFee, data),
-            abi.encode(tokensCollected)
-        );
-        vm.expectCall(
-            address(recurringCollector),
-            abi.encodeCall(IPaymentsCollector.collect, (IGraphPayments.PaymentTypes.IndexingFee, data))
-        );
+        _mockCollectorCollect(address(recurringCollector), data, tokensCollected);
         vm.expectEmit(address(subgraphService));
         emit ISubgraphService.IndexingFeesCollectedV1(
             params.indexer,
@@ -62,7 +53,7 @@ contract SubgraphServiceIndexingAgreementCollectTest is SubgraphServiceIndexingA
         subgraphService.collect(
             params.indexer,
             IGraphPayments.PaymentTypes.IndexingFee,
-            _encodeCollectDataV1(signedRCA.rca.agreementId, entities, poi)
+            _encodeCollectDataV1(signedRCA.rca.agreementId, entities, poi, epochManager.currentEpoch())
         );
     }
 
@@ -76,6 +67,7 @@ contract SubgraphServiceIndexingAgreementCollectTest is SubgraphServiceIndexingA
         uint256 entities,
         bytes32 poi
     ) public withSafeIndexerOrOperator(indexer) {
+        uint256 currentEpoch = epochManager.currentEpoch();
         resetPrank(users.pauseGuardian);
         subgraphService.pause();
 
@@ -84,7 +76,7 @@ contract SubgraphServiceIndexingAgreementCollectTest is SubgraphServiceIndexingA
         subgraphService.collect(
             indexer,
             IGraphPayments.PaymentTypes.IndexingFee,
-            _encodeCollectDataV1(agreementId, entities, poi)
+            _encodeCollectDataV1(agreementId, entities, poi, currentEpoch)
         );
     }
 
@@ -96,6 +88,7 @@ contract SubgraphServiceIndexingAgreementCollectTest is SubgraphServiceIndexingA
         bytes32 poi
     ) public withSafeIndexerOrOperator(operator) {
         vm.assume(operator != indexer);
+        uint256 currentEpoch = epochManager.currentEpoch();
         resetPrank(operator);
         bytes memory expectedErr = abi.encodeWithSelector(
             ProvisionManager.ProvisionManagerNotAuthorized.selector,
@@ -106,7 +99,7 @@ contract SubgraphServiceIndexingAgreementCollectTest is SubgraphServiceIndexingA
         subgraphService.collect(
             indexer,
             IGraphPayments.PaymentTypes.IndexingFee,
-            _encodeCollectDataV1(agreementId, entities, poi)
+            _encodeCollectDataV1(agreementId, entities, poi, currentEpoch)
         );
     }
 
@@ -118,6 +111,7 @@ contract SubgraphServiceIndexingAgreementCollectTest is SubgraphServiceIndexingA
         bytes32 poi
     ) public withSafeIndexerOrOperator(indexer) {
         uint256 tokens = bound(unboundedTokens, 1, minimumProvisionTokens - 1);
+        uint256 currentEpoch = epochManager.currentEpoch();
         mint(indexer, tokens);
         resetPrank(indexer);
         _createProvision(indexer, tokens, maxSlashingPercentage, disputePeriod);
@@ -133,7 +127,7 @@ contract SubgraphServiceIndexingAgreementCollectTest is SubgraphServiceIndexingA
         subgraphService.collect(
             indexer,
             IGraphPayments.PaymentTypes.IndexingFee,
-            _encodeCollectDataV1(agreementId, entities, poi)
+            _encodeCollectDataV1(agreementId, entities, poi, currentEpoch)
         );
     }
 
@@ -145,6 +139,7 @@ contract SubgraphServiceIndexingAgreementCollectTest is SubgraphServiceIndexingA
         bytes32 poi
     ) public withSafeIndexerOrOperator(indexer) {
         uint256 tokens = bound(unboundedTokens, minimumProvisionTokens, MAX_TOKENS);
+        uint256 currentEpoch = epochManager.currentEpoch();
         mint(indexer, tokens);
         resetPrank(indexer);
         _createProvision(indexer, tokens, maxSlashingPercentage, disputePeriod);
@@ -156,7 +151,7 @@ contract SubgraphServiceIndexingAgreementCollectTest is SubgraphServiceIndexingA
         subgraphService.collect(
             indexer,
             IGraphPayments.PaymentTypes.IndexingFee,
-            _encodeCollectDataV1(agreementId, entities, poi)
+            _encodeCollectDataV1(agreementId, entities, poi, currentEpoch)
         );
     }
 
@@ -167,6 +162,7 @@ contract SubgraphServiceIndexingAgreementCollectTest is SubgraphServiceIndexingA
         bytes32 poi
     ) public {
         TestIndexerParams memory params = _setupTestIndexer(fuzzyParams);
+        uint256 currentEpoch = epochManager.currentEpoch();
 
         bytes memory expectedErr = abi.encodeWithSelector(
             ISubgraphService.SubgraphServiceIndexingAgreementNotActive.selector,
@@ -177,7 +173,7 @@ contract SubgraphServiceIndexingAgreementCollectTest is SubgraphServiceIndexingA
         subgraphService.collect(
             params.indexer,
             IGraphPayments.PaymentTypes.IndexingFee,
-            _encodeCollectDataV1(agreementId, entities, poi)
+            _encodeCollectDataV1(agreementId, entities, poi, currentEpoch)
         );
     }
 
@@ -192,6 +188,7 @@ contract SubgraphServiceIndexingAgreementCollectTest is SubgraphServiceIndexingA
 
         resetPrank(params.indexer);
         subgraphService.stopService(params.indexer, abi.encode(params.allocationId));
+        uint256 currentEpoch = epochManager.currentEpoch();
 
         bytes memory expectedErr = abi.encodeWithSelector(
             AllocationManager.AllocationManagerAllocationClosed.selector,
@@ -201,7 +198,7 @@ contract SubgraphServiceIndexingAgreementCollectTest is SubgraphServiceIndexingA
         subgraphService.collect(
             params.indexer,
             IGraphPayments.PaymentTypes.IndexingFee,
-            _encodeCollectDataV1(fuzzySignedRCA.rca.agreementId, entities, poi)
+            _encodeCollectDataV1(fuzzySignedRCA.rca.agreementId, entities, poi, currentEpoch)
         );
     }
     /* solhint-enable graph/func-name-mixedcase */

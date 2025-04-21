@@ -42,7 +42,7 @@ contract RecurringCollectorSharedTest is Test, Bounder {
     function _fuzzyAuthorizeAndAccept(
         FuzzyAcceptableRCA memory _fuzzyAcceptableRCA
     ) internal returns (IRecurringCollector.SignedRCA memory) {
-        vm.assume(_fuzzyAcceptableRCA.rca.payer != address(0));
+        _fuzzyAcceptableRCA.rca = _sensibleRCA(_fuzzyAcceptableRCA.rca);
         _fuzzyAcceptableRCA.rca = _recurringCollectorHelper.withOKAcceptDeadline(_fuzzyAcceptableRCA.rca);
         return _authorizeAndAcceptV2(_fuzzyAcceptableRCA.rca, boundKey(_fuzzyAcceptableRCA.unboundedSignerKey));
     }
@@ -108,6 +108,7 @@ contract RecurringCollectorSharedTest is Test, Bounder {
             _rca.dataService,
             _rca.payer,
             _rca.serviceProvider,
+            _rca.agreementId,
             _fuzzyParams.collectionId,
             _tokens,
             _fuzzyParams.dataServiceCut
@@ -136,9 +137,12 @@ contract RecurringCollectorSharedTest is Test, Bounder {
     function _sensibleRCA(
         IRecurringCollector.RecurringCollectionAgreement memory _rca
     ) internal pure returns (IRecurringCollector.RecurringCollectionAgreement memory) {
+        vm.assume(_rca.dataService != address(0));
+        vm.assume(_rca.payer != address(0));
+        vm.assume(_rca.serviceProvider != address(0));
         _rca.minSecondsPerCollection = uint32(bound(_rca.minSecondsPerCollection, 60, 60 * 60 * 24));
         _rca.maxSecondsPerCollection = uint32(
-            bound(_rca.maxSecondsPerCollection, _rca.minSecondsPerCollection * 2, 60 * 60 * 24 * 30)
+            bound(_rca.maxSecondsPerCollection, _rca.minSecondsPerCollection + 7200, 60 * 60 * 24 * 30)
         );
         _rca.duration = bound(_rca.duration, _rca.maxSecondsPerCollection * 10, type(uint256).max);
         _rca.maxInitialTokens = bound(_rca.maxInitialTokens, 0, 1e18 * 100_000_000);

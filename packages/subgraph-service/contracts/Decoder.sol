@@ -37,8 +37,10 @@ contract Decoder {
      *
      * @param data The data to decode.
      */
-    function decodeCollectIndexingFeeDataV1(bytes memory data) external pure returns (uint256 entities, bytes32 poi) {
-        return abi.decode(data, (uint256, bytes32));
+    function decodeCollectIndexingFeeDataV1(
+        bytes memory data
+    ) external pure returns (uint256 entities, bytes32 poi, uint256 epoch) {
+        return abi.decode(data, (uint256, bytes32, uint256));
     }
 
     /**
@@ -81,9 +83,9 @@ contract Decoder {
         }
     }
 
-    function _decodeCollectIndexingFeeDataV1(bytes memory _data) internal view returns (uint256, bytes32) {
-        try this.decodeCollectIndexingFeeDataV1(_data) returns (uint256 entities, bytes32 poi) {
-            return (entities, poi);
+    function _decodeCollectIndexingFeeDataV1(bytes memory _data) internal view returns (uint256, bytes32, uint256) {
+        try this.decodeCollectIndexingFeeDataV1(_data) returns (uint256 entities, bytes32 poi, uint256 epoch) {
+            return (entities, poi, epoch);
         } catch {
             revert ISubgraphService.SubgraphServiceDecoderInvalidData("_decodeCollectIndexingFeeDataV1", _data);
         }

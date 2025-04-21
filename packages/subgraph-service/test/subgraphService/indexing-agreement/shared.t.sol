@@ -2,6 +2,8 @@
 pragma solidity 0.8.27;
 import { IAuthorizable } from "@graphprotocol/horizon/contracts/interfaces/IAuthorizable.sol";
 import { IRecurringCollector } from "@graphprotocol/horizon/contracts/interfaces/IRecurringCollector.sol";
+import { IPaymentsCollector } from "@graphprotocol/horizon/contracts/interfaces/IPaymentsCollector.sol";
+import { IGraphPayments } from "@graphprotocol/horizon/contracts/interfaces/IGraphPayments.sol";
 
 import { ISubgraphService } from "../../../contracts/interfaces/ISubgraphService.sol";
 
@@ -144,11 +146,11 @@ contract SubgraphServiceIndexingAgreementSharedTest is SubgraphServiceTest, Boun
         bool _result
     ) internal {
         vm.mockCall(
-            address(_recurringCollector),
+            _recurringCollector,
             abi.encodeWithSelector(IAuthorizable.isAuthorized.selector, _payer, _indexer),
             abi.encode(_result)
         );
-        vm.expectCall(address(_recurringCollector), abi.encodeCall(IAuthorizable.isAuthorized, (_payer, _indexer)));
+        vm.expectCall(_recurringCollector, abi.encodeCall(IAuthorizable.isAuthorized, (_payer, _indexer)));
     }
 
     function _mockCollectorCancel(address _recurringCollector, bytes16 _agreementId) internal {
@@ -169,7 +171,19 @@ contract SubgraphServiceIndexingAgreementSharedTest is SubgraphServiceTest, Boun
             abi.encodeWithSelector(IRecurringCollector.accept.selector, _signedRCA),
             new bytes(0)
         );
-        vm.expectCall(address(recurringCollector), abi.encodeCall(IRecurringCollector.accept, (_signedRCA)));
+        vm.expectCall(_recurringCollector, abi.encodeCall(IRecurringCollector.accept, (_signedRCA)));
+    }
+
+    function _mockCollectorCollect(address _recurringCollector, bytes memory _data, uint256 _tokensCollected) internal {
+        vm.mockCall(
+            _recurringCollector,
+            abi.encodeWithSelector(IPaymentsCollector.collect.selector, IGraphPayments.PaymentTypes.IndexingFee, _data),
+            abi.encode(_tokensCollected)
+        );
+        vm.expectCall(
+            _recurringCollector,
+            abi.encodeCall(IPaymentsCollector.collect, (IGraphPayments.PaymentTypes.IndexingFee, _data))
+        );
     }
 
     function _isSafeSubgraphServiceCaller(address _candidate) internal view returns (bool) {
@@ -195,9 +209,10 @@ contract SubgraphServiceIndexingAgreementSharedTest is SubgraphServiceTest, Boun
     function _encodeCollectDataV1(
         bytes16 _agreementId,
         uint256 _entities,
-        bytes32 _poi
+        bytes32 _poi,
+        uint256 _epoch
     ) internal pure returns (bytes memory) {
-        return abi.encode(_agreementId, abi.encode(_entities, _poi));
+        return abi.encode(_agreementId, abi.encode(_entities, _poi, _epoch));
     }
 
     function _encodeRCAMetadataV1(

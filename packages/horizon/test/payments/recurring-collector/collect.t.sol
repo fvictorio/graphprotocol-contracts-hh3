@@ -53,6 +53,7 @@ contract RecurringCollectorCollectTest is RecurringCollectorSharedTest {
         address notDataService
     ) public {
         vm.assume(rca.dataService != notDataService);
+        rca = _sensibleRCA(rca);
         params.agreementId = rca.agreementId;
         bytes memory data = _generateCollectData(params);
 
@@ -85,9 +86,11 @@ contract RecurringCollectorCollectTest is RecurringCollectorSharedTest {
         TestCollectParams memory testCollectParams,
         uint256 unboundedKey
     ) public {
-        IRecurringCollector.CollectParams memory fuzzyParams = testCollectParams.collectData;
+        rca = _sensibleRCA(rca);
         _authorizeAndAccept(rca, boundKey(unboundedKey));
         _cancel(rca);
+        IRecurringCollector.CollectParams memory fuzzyParams = testCollectParams.collectData;
+        fuzzyParams.tokens = bound(fuzzyParams.tokens, 1, type(uint256).max);
         IRecurringCollector.CollectParams memory collectParams = _generateCollectParams(
             rca,
             fuzzyParams.collectionId,
@@ -115,7 +118,7 @@ contract RecurringCollectorCollectTest is RecurringCollectorSharedTest {
     ) public {
         rca = _sensibleRCA(rca);
         // ensure agreement is short lived
-        rca.duration = bound(rca.duration, 0, rca.maxSecondsPerCollection * 100);
+        rca.duration = bound(rca.duration, rca.minSecondsPerCollection + 7200, rca.maxSecondsPerCollection * 100);
         // skip to sometime in the future when there is still plenty of time after the agreement elapsed
         skip(boundSkipCeil(unboundedAcceptAt, type(uint256).max - (rca.duration * 10)));
         uint256 agreementEnd = block.timestamp + rca.duration;
@@ -162,6 +165,7 @@ contract RecurringCollectorCollectTest is RecurringCollectorSharedTest {
 
         uint256 collectionSeconds = boundSkipCeil(unboundedSkip, rca.minSecondsPerCollection - 1);
         skip(collectionSeconds);
+        fuzzyParams.tokens = bound(fuzzyParams.tokens, 1, type(uint256).max);
         IRecurringCollector.CollectParams memory collectParams = _generateCollectParams(
             rca,
             fuzzyParams.collectionId,
@@ -207,6 +211,7 @@ contract RecurringCollectorCollectTest is RecurringCollectorSharedTest {
         uint256 collectionSeconds = boundSkip(unboundedSkip, rca.maxSecondsPerCollection + 1, durationLeft);
         skip(collectionSeconds);
 
+        fuzzyParams.tokens = bound(fuzzyParams.tokens, 1, type(uint256).max);
         IRecurringCollector.CollectParams memory collectParams = _generateCollectParams(
             rca,
             fuzzyParams.collectionId,

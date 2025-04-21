@@ -739,12 +739,24 @@ contract SubgraphService is
             agreement.version == IndexingAgreementVersion.V1,
             SubgraphServiceInvalidIndexingAgreementVersion(agreement.version)
         );
-        (uint256 entities, bytes32 poi) = _decodeCollectIndexingFeeDataV1(_data);
+        (uint256 entities, bytes32 poi, uint256 epoch) = _decodeCollectIndexingFeeDataV1(_data);
+        uint256 currentEpoch = _graphEpochManager().currentEpoch();
+        if (epoch != currentEpoch) {
+            revert SubgraphServiceInvalidEpoch(currentEpoch, epoch);
+        }
+
+        uint256 tokensToCollect;
+        if (entities == 0 && poi == bytes32(0)) {
+            tokensToCollect = 0;
+        } else {
+            tokensToCollect = _indexingAgreementTokensToCollect(_agreementId, agreement, entities);
+        }
+        agreement.lastCollectionAt = block.timestamp;
 
         uint256 tokensCollected = _indexingAgreementCollect(
             _agreementId,
             bytes32(uint256(uint160(agreement.allocationId))),
-            _indexingAgreementTokensToCollect(_agreementId, agreement, entities)
+            tokensToCollect
         );
 
         _releaseAndLockStake(agreement.indexer, tokensCollected);
@@ -755,7 +767,7 @@ contract SubgraphService is
             _agreementId,
             agreement.allocationId,
             allocation.subgraphDeploymentId,
-            _graphEpochManager().currentEpoch(),
+            currentEpoch,
             tokensCollected,
             entities,
             poi
@@ -809,21 +821,6 @@ contract SubgraphService is
         storedTerms.tokensPerEntityPerSecond = newTerms.tokensPerEntityPerSecond;
     }
 
-    function _indexingAgreementTokensToCollect(
-        bytes16 _agreementId,
-        IndexingAgreementData storage _agreement,
-        uint256 _entities
-    ) private returns (uint256) {
-        IndexingAgreementTermsV1 memory termsV1 = _getIndexingAgreementTermsV1(_agreementId);
-
-        uint256 collectionSeconds = block.timestamp;
-        collectionSeconds -= _agreement.lastCollectionAt > 0 ? _agreement.lastCollectionAt : _agreement.acceptedAt;
-        _agreement.lastCollectionAt = block.timestamp;
-
-        // FIX-ME: this is bad because it encourages indexers to collect at max seconds allowed to maximize collection.
-        return collectionSeconds * (termsV1.tokensPerSecond + termsV1.tokensPerEntityPerSecond * _entities);
-    }
-
     function _indexingAgreementCollect(
         bytes16 _agreementId,
         bytes32 _collectionId,
@@ -857,6 +854,20 @@ contract SubgraphService is
         delete allocationToActiveAgreementId[_agreement.allocationId];
 
         _recurringCollector().cancel(_agreementId);
+    }
+
+    function _indexingAgreementTokensToCollect(
+        bytes16 _agreementId,
+        IndexingAgreementData memory _agreement,
+        uint256 _entities
+    ) private view returns (uint256) {
+        IndexingAgreementTermsV1 memory termsV1 = _getIndexingAgreementTermsV1(_agreementId);
+
+        uint256 collectionSeconds = block.timestamp;
+        collectionSeconds -= _agreement.lastCollectionAt > 0 ? _agreement.lastCollectionAt : _agreement.acceptedAt;
+
+        // FIX-ME: this is bad because it encourages indexers to collect at max seconds allowed to maximize collection.
+        return collectionSeconds * (termsV1.tokensPerSecond + termsV1.tokensPerEntityPerSecond * _entities);
     }
 
     function _getForUpdateIndexingAgreement(bytes16 _agreementId) private view returns (IndexingAgreementData storage) {

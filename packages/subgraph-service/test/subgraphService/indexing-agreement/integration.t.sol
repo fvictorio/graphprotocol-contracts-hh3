@@ -78,7 +78,7 @@ contract SubgraphServiceIndexingAgreementCancelTest is SubgraphServiceIndexingAg
         uint256 tokensCollected = subgraphService.collect(
             params.indexer,
             IGraphPayments.PaymentTypes.IndexingFee,
-            _encodeCollectDataV1(agreementId, 1, keccak256(abi.encodePacked("poi")))
+            _encodeCollectDataV1(agreementId, 1, keccak256(abi.encodePacked("poi")), epochManager.currentEpoch())
         );
         TestState memory afterCollect = _getState(fuzzyRCA.payer, params.indexer);
         uint256 indexerTokensCollected = afterCollect.indexerBalance - beforeCollect.indexerBalance;

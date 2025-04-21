@@ -125,6 +125,7 @@ interface IRecurringCollector is IAuthorizable, IPaymentsCollector {
         address indexed dataService,
         address indexed payer,
         address indexed serviceProvider,
+        bytes16 agreementId,
         bytes32 collectionId,
         uint256 tokens,
         uint256 dataServiceCut
@@ -191,6 +192,12 @@ interface IRecurringCollector is IAuthorizable, IPaymentsCollector {
      * @param acceptedAt The agreement accepted timestamp
      */
     error RecurringCollectorAgreementInvalid(bytes16 agreementId, uint256 acceptedAt);
+
+    /**
+     * Thrown when accepting or upgrading an agreement with invalid params
+     * @param agreementId The agreement ID
+     */
+    error RecurringCollectorAgreementInvalidParams(bytes16 agreementId);
 
     /**
      * Thrown when calling collect() on an elapsed agreement

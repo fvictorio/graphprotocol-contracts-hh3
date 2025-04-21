@@ -96,12 +96,12 @@ contract RecurringCollector is EIP712, GraphDirectory, Authorizable, IRecurringC
         agreement.dataService = signedRCA.rca.dataService;
         agreement.payer = signedRCA.rca.payer;
         agreement.serviceProvider = signedRCA.rca.serviceProvider;
-        // FIX-ME: These need to be validated to something that makes sense for the contract
         agreement.duration = signedRCA.rca.duration;
         agreement.maxInitialTokens = signedRCA.rca.maxInitialTokens;
         agreement.maxOngoingTokensPerSecond = signedRCA.rca.maxOngoingTokensPerSecond;
         agreement.minSecondsPerCollection = signedRCA.rca.minSecondsPerCollection;
         agreement.maxSecondsPerCollection = signedRCA.rca.maxSecondsPerCollection;
+        _requireValidAgreement(agreement, signedRCA.rca.agreementId);
     }
 
     /**
@@ -141,12 +141,12 @@ contract RecurringCollector is EIP712, GraphDirectory, Authorizable, IRecurringC
         _requireAuthorizedRCAUSigner(signedRCAU, agreement.payer);
 
         // upgrade the agreement
-        // FIX-ME: These need to be validated to something that makes sense for the contract
         agreement.duration = signedRCAU.rcau.duration;
         agreement.maxInitialTokens = signedRCAU.rcau.maxInitialTokens;
         agreement.maxOngoingTokensPerSecond = signedRCAU.rcau.maxOngoingTokensPerSecond;
         agreement.minSecondsPerCollection = signedRCAU.rcau.minSecondsPerCollection;
         agreement.maxSecondsPerCollection = signedRCAU.rcau.maxSecondsPerCollection;
+        _requireValidAgreement(agreement, signedRCAU.rcau.agreementId);
     }
 
     /**
@@ -211,17 +211,21 @@ contract RecurringCollector is EIP712, GraphDirectory, Authorizable, IRecurringC
             RecurringCollectorDataServiceNotAuthorized(_params.agreementId, msg.sender)
         );
 
-        _requireValidCollect(agreement, _params.agreementId, _params.tokens);
-        agreement.lastCollectionAt = block.timestamp;
+        _requireCollectableAgreement(agreement, _params.agreementId);
 
-        _graphPaymentsEscrow().collect(
-            IGraphPayments.PaymentTypes.IndexingFee,
-            agreement.payer,
-            agreement.serviceProvider,
-            _params.tokens,
-            agreement.dataService,
-            _params.dataServiceCut
-        );
+        if (_params.tokens != 0) {
+            _requireValidCollect(agreement, _params.agreementId, _params.tokens);
+
+            _graphPaymentsEscrow().collect(
+                IGraphPayments.PaymentTypes.IndexingFee,
+                agreement.payer,
+                agreement.serviceProvider,
+                _params.tokens,
+                agreement.dataService,
+                _params.dataServiceCut
+            );
+        }
+        agreement.lastCollectionAt = block.timestamp;
 
         emit PaymentCollected(
             IGraphPayments.PaymentTypes.IndexingFee,
@@ -236,6 +240,7 @@ contract RecurringCollector is EIP712, GraphDirectory, Authorizable, IRecurringC
             agreement.dataService,
             agreement.payer,
             agreement.serviceProvider,
+            _params.agreementId,
             _params.collectionId,
             _params.tokens,
             _params.dataServiceCut
@@ -244,10 +249,32 @@ contract RecurringCollector is EIP712, GraphDirectory, Authorizable, IRecurringC
         return _params.tokens;
     }
 
-    /**
-     * @notice Requires that the agreement is valid for collection.
-     */
-    function _requireValidCollect(AgreementData memory _agreement, bytes16 _agreementId, uint256 _tokens) private view {
+    function _requireValidAgreement(AgreementData memory _agreement, bytes16 _agreementId) private view {
+        require(
+            _agreement.dataService != address(0) &&
+                _agreement.payer != address(0) &&
+                _agreement.serviceProvider != address(0),
+            RecurringCollectorAgreementInvalidParams(_agreementId)
+        );
+
+        // Agreement needs to end in the future
+        require(_agreementEndsAt(_agreement) > block.timestamp, RecurringCollectorAgreementInvalidParams(_agreementId));
+
+        // Collection window needs to be at least 2 hours
+        require(
+            _agreement.maxSecondsPerCollection > _agreement.minSecondsPerCollection &&
+                (_agreement.maxSecondsPerCollection - _agreement.minSecondsPerCollection >= 7200),
+            RecurringCollectorAgreementInvalidParams(_agreementId)
+        );
+
+        // Agreement needs to last at least one min collection window
+        require(
+            _agreement.duration >= _agreement.minSecondsPerCollection + 7200,
+            RecurringCollectorAgreementInvalidParams(_agreementId)
+        );
+    }
+
+    function _requireCollectableAgreement(AgreementData memory _agreement, bytes16 _agreementId) private view {
         require(
             _agreement.acceptedAt > 0 && _agreement.acceptedAt != CANCELED,
             RecurringCollectorAgreementInvalid(_agreementId, _agreement.acceptedAt)
@@ -257,9 +284,14 @@ contract RecurringCollector is EIP712, GraphDirectory, Authorizable, IRecurringC
             ? _agreement.acceptedAt + _agreement.duration
             : type(uint256).max;
         require(agreementEnd >= block.timestamp, RecurringCollectorAgreementElapsed(_agreementId, agreementEnd));
+    }
 
+    /**
+     * @notice Requires that the collection params are valid.
+     */
+    function _requireValidCollect(AgreementData memory _agreement, bytes16 _agreementId, uint256 _tokens) private view {
         uint256 collectionSeconds = block.timestamp;
-        collectionSeconds -= _agreement.lastCollectionAt > 0 ? _agreement.lastCollectionAt : _agreement.acceptedAt;
+        collectionSeconds -= _agreementCollectionStartAt(_agreement);
         require(
             collectionSeconds >= _agreement.minSecondsPerCollection,
             RecurringCollectorCollectionTooSoon(_agreementId, collectionSeconds, _agreement.minSecondsPerCollection)
@@ -375,5 +407,16 @@ contract RecurringCollector is EIP712, GraphDirectory, Authorizable, IRecurringC
      */
     function _getAgreement(bytes16 _agreementId) private view returns (AgreementData memory) {
         return agreements[_agreementId];
+    }
+
+    function _agreementCollectionStartAt(AgreementData memory _agreement) private pure returns (uint256) {
+        return _agreement.lastCollectionAt > 0 ? _agreement.lastCollectionAt : _agreement.acceptedAt;
+    }
+
+    function _agreementEndsAt(AgreementData memory _agreement) private pure returns (uint256) {
+        return
+            _agreement.duration < type(uint256).max - _agreement.acceptedAt
+                ? _agreement.acceptedAt + _agreement.duration
+                : type(uint256).max;
     }
 }
