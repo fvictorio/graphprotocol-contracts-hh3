@@ -102,6 +102,19 @@ contract RecurringCollector is EIP712, GraphDirectory, Authorizable, IRecurringC
         agreement.minSecondsPerCollection = signedRCA.rca.minSecondsPerCollection;
         agreement.maxSecondsPerCollection = signedRCA.rca.maxSecondsPerCollection;
         _requireValidAgreement(agreement, signedRCA.rca.agreementId);
+
+        emit AgreementAccepted(
+            agreement.dataService,
+            agreement.payer,
+            agreement.serviceProvider,
+            signedRCA.rca.agreementId,
+            agreement.acceptedAt,
+            agreement.duration,
+            agreement.maxInitialTokens,
+            agreement.maxOngoingTokensPerSecond,
+            agreement.minSecondsPerCollection,
+            agreement.maxSecondsPerCollection
+        );
     }
 
     /**
@@ -117,6 +130,14 @@ contract RecurringCollector is EIP712, GraphDirectory, Authorizable, IRecurringC
             RecurringCollectorDataServiceNotAuthorized(agreementId, msg.sender)
         );
         agreement.acceptedAt = CANCELED;
+
+        emit AgreementCanceled(
+            agreement.dataService,
+            agreement.payer,
+            agreement.serviceProvider,
+            agreementId,
+            block.timestamp
+        );
     }
 
     /**
@@ -147,6 +168,19 @@ contract RecurringCollector is EIP712, GraphDirectory, Authorizable, IRecurringC
         agreement.minSecondsPerCollection = signedRCAU.rcau.minSecondsPerCollection;
         agreement.maxSecondsPerCollection = signedRCAU.rcau.maxSecondsPerCollection;
         _requireValidAgreement(agreement, signedRCAU.rcau.agreementId);
+
+        emit AgreementUpgraded(
+            agreement.dataService,
+            agreement.payer,
+            agreement.serviceProvider,
+            signedRCAU.rcau.agreementId,
+            block.timestamp,
+            agreement.duration,
+            agreement.maxInitialTokens,
+            agreement.maxOngoingTokensPerSecond,
+            agreement.minSecondsPerCollection,
+            agreement.maxSecondsPerCollection
+        );
     }
 
     /**

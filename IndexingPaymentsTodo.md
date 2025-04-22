@@ -4,7 +4,7 @@
 * Economics
   * If service wants to collect more than collector allows. Collector limits but doesn't tell the service?
   * Since an allocation is required for collecting, do we want to expect that the allocation is not stale? Do we want to add code to collect rewards as part of the collection of fees? Make sure allocation is more than one epoch old if we attempt this.
-  * What happens if the escrow doesn't have enough funds? Since you can't collect that means you lose out forever?
+  * What should happen if the escrow doesn't have enough funds?
   * Don't pay for entities on initial collection? Where did we land in terms of payment terms?
   * Should we set a different param for initial collection time max? Some subgraphs take a lot to catch up.
   * How do we solve for the case where an indexer has reached their max expected payout for the initial sync but haven't reached the current epoch (thus their POI is incorrect)?
@@ -14,7 +14,6 @@
 * If an indexer closes an allocation, what should happen to the accepeted agreement?
 * test_SubgraphService_CollectIndexingFee_Integration fails with PaymentsEscrowInconsistentCollection
 * Reduce the number of errors declared and returned
-* Missing events for accept, cancel, upgrade RCAs.
 * Switch `duration` for `endsAt`?
 
 # Done
@@ -28,3 +27,4 @@
 * DONE: ~~Maybe IRecurringCollector.cancel(address payer, address serviceProvider, bytes16 agreementId) should only take in agreementId?~~
 * DONE: ~~Unify to one error in Decoder.sol~~
 * DONE: ~~Built-in upgrade path to indexing agreements v2~~
+* DONE: ~~Missing events for accept, cancel, upgrade RCAs.~~

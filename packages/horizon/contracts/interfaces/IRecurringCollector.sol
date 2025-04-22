@@ -116,6 +116,58 @@ interface IRecurringCollector is IAuthorizable, IPaymentsCollector {
     }
 
     /**
+     * @notice Emitted when an agreement is accepted
+     * @param dataService The address of the data service
+     * @param payer The address of the payer
+     * @param serviceProvider The address of the service provider
+     */
+    event AgreementAccepted(
+        address indexed dataService,
+        address indexed payer,
+        address indexed serviceProvider,
+        bytes16 agreementId,
+        uint256 acceptedAt,
+        uint256 duration,
+        uint256 maxInitialTokens,
+        uint256 maxOngoingTokensPerSecond,
+        uint32 minSecondsPerCollection,
+        uint32 maxSecondsPerCollection
+    );
+
+    /**
+     * @notice Emitted when an agreement is canceled
+     * @param dataService The address of the data service
+     * @param payer The address of the payer
+     * @param serviceProvider The address of the service provider
+     */
+    event AgreementCanceled(
+        address indexed dataService,
+        address indexed payer,
+        address indexed serviceProvider,
+        bytes16 agreementId,
+        uint256 canceledAt
+    );
+
+    /**
+     * @notice Emitted when an agreement is upgraded
+     * @param dataService The address of the data service
+     * @param payer The address of the payer
+     * @param serviceProvider The address of the service provider
+     */
+    event AgreementUpgraded(
+        address indexed dataService,
+        address indexed payer,
+        address indexed serviceProvider,
+        bytes16 agreementId,
+        uint256 upgradedAt,
+        uint256 duration,
+        uint256 maxInitialTokens,
+        uint256 maxOngoingTokensPerSecond,
+        uint32 minSecondsPerCollection,
+        uint32 maxSecondsPerCollection
+    );
+
+    /**
      * @notice Emitted when an RCA is collected
      * @param dataService The address of the data service
      * @param payer The address of the payer

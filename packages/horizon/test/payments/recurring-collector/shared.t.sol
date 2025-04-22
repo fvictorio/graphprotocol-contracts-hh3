@@ -63,6 +63,19 @@ contract RecurringCollectorSharedTest is Test, Bounder {
         _recurringCollectorHelper.authorizeSignerWithChecks(_rca.payer, _signerKey);
         IRecurringCollector.SignedRCA memory signedRCA = _recurringCollectorHelper.generateSignedRCA(_rca, _signerKey);
 
+        vm.expectEmit(address(_recurringCollector));
+        emit IRecurringCollector.AgreementAccepted(
+            _rca.dataService,
+            _rca.payer,
+            _rca.serviceProvider,
+            _rca.agreementId,
+            block.timestamp,
+            _rca.duration,
+            _rca.maxInitialTokens,
+            _rca.maxOngoingTokensPerSecond,
+            _rca.minSecondsPerCollection,
+            _rca.maxSecondsPerCollection
+        );
         vm.prank(_rca.dataService);
         _recurringCollector.accept(signedRCA);
 
@@ -70,6 +83,14 @@ contract RecurringCollectorSharedTest is Test, Bounder {
     }
 
     function _cancel(IRecurringCollector.RecurringCollectionAgreement memory _rca) internal {
+        vm.expectEmit(address(_recurringCollector));
+        emit IRecurringCollector.AgreementCanceled(
+            _rca.dataService,
+            _rca.payer,
+            _rca.serviceProvider,
+            _rca.agreementId,
+            block.timestamp
+        );
         vm.prank(_rca.dataService);
         _recurringCollector.cancel(_rca.agreementId);
     }

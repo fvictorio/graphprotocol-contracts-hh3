@@ -127,6 +127,19 @@ contract RecurringCollectorUpgradeTest is RecurringCollectorSharedTest {
             signerKey
         );
 
+        vm.expectEmit(address(_recurringCollector));
+        emit IRecurringCollector.AgreementUpgraded(
+            rca.dataService,
+            rca.payer,
+            rca.serviceProvider,
+            rcau.agreementId,
+            block.timestamp,
+            rcau.duration,
+            rcau.maxInitialTokens,
+            rcau.maxOngoingTokensPerSecond,
+            rcau.minSecondsPerCollection,
+            rcau.maxSecondsPerCollection
+        );
         vm.prank(rca.dataService);
         _recurringCollector.upgrade(signedRCAU);
 
